@@ -62,14 +62,20 @@ if [[ -n $(find "$STAGE/root" -mindepth 1 ! -type f ! -type d) ]]; then
 	die "provisioning archive: unexpected file types"
 fi
 dvtee_check_config "$STAGE/root" || die "rejected provisioning archive"
+if [[ -e $STAGE/root/config/keymanager-import ]] \
+	&& [[ -n $(find "$STAGE/root/validator_keys" -mindepth 1 2>/dev/null) ]]; then
+	die "provisioning archive: keymanager-import takes no keystores on the disk"
+fi
 
 # Copy into place, then write the marker last, so an interrupted run is
 # simply repeated on the next boot.
 rm -rf "$DATA/config" "$DATA/validator_keys"
 mkdir -m 0700 "$DATA/config" "$DATA/validator_keys"
-cp --no-dereference --preserve=timestamps "$STAGE/root/validator_keys/"keystore-* "$DATA/validator_keys/"
+# No keystores at all with keymanager-import: keys arrive later over the API.
+find "$STAGE/root/validator_keys" -maxdepth 1 -type f -name 'keystore-*' \
+	-exec cp --no-dereference --preserve=timestamps -t "$DATA/validator_keys/" {} +
 cp --no-dereference --preserve=timestamps "$STAGE/root/config/"* "$DATA/config/"
-chmod 0600 "$DATA/config/"* "$DATA/validator_keys/"*
+find "$DATA/config" "$DATA/validator_keys" -maxdepth 1 -type f -exec chmod 0600 {} +
 dvtee_check_config "$DATA" || die "copied config does not validate"
 
 keys=$(find "$DATA/validator_keys" -name 'keystore-*.json' | wc -l)

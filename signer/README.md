@@ -80,6 +80,37 @@ the request.
 * **`--network custom:<gvr>:<genesis_fork_version>:<capella_fork_version>`.** This still works but has
   no fork schedule. Versions are taken from the request, and the Gloas-only request types are refused.
 
+## Keymanager import: shares straight from `charon dkg`
+
+`serve --keymanager-import` starts a signer with no keys. `charon dkg` then delivers this operator's shares to
+it with `--keymanager-address`, and charon keeps no copy of them.
+
+1. **Start in import mode.**
+   - Only the public listener is bound: health, attestation, and two import routes. Nothing is signed.
+   - It needs TLS, `--public-listen`, and a token with the **`import`** role in `--auth-token-file`. That role
+     grants no signing.
+2. **Run the DKG.**
+   - Flags: `charon dkg --keymanager-address https://<public listener> --keymanager-auth-token <import token>`.
+   - charon verifies TLS against the system CA file and has no CA option, so point `SSL_CERT_FILE` at a bundle:
+     the system CAs plus this signer's certificate. Take that certificate from verified attestation evidence.
+     The same charon process also reaches the Obol API and relays over HTTPS, so the system CAs must stay in.
+3. **What the signer does:**
+   - `POST /eth/v1/keystores` is the keymanager API's import, allowed **once**.
+   - Every keystore is decrypted and checked, then written with fsync, before the 200.
+   - Any error returns non-2xx and leaves nothing behind. charon checks only the status code.
+4. **Upload the lock.** Send the lock charon wrote:
+   `curl --cacert cert.pem -H "Authorization: Bearer <import token>" --data-binary @cluster-lock.json https://<public listener>/dvtee/v1/cluster-lock`.
+   - It is checked and pinned exactly like `--cluster-lock`.
+   - The signer then exits with status **75**. Restart it in signing mode; the image's unit does this
+     (`RestartForceExitStatus=75`).
+5. **If it crashes midway:** an `import-pending` marker is written before any key and removed only after the
+   lock is pinned. Until then the signer stays in import mode and never signs, so a crash between the keys and the
+   lock can't leave an unpinned signer serving.
+
+[`e2e/keymanager-import.sh`](../e2e/keymanager-import.sh) runs it end to end with charon's own client:
+`charon create cluster --keymanager-addresses` against four insecure-dev signers. In the guest image, provision
+with `scripts/make-provision-disk.sh -I` (no keys on the disk; `-T` must list an `import` token).
+
 ## API
 
 | Method | Path | Notes |

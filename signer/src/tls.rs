@@ -48,6 +48,9 @@ pub enum Role {
     Exit,
     /// `DEPOSIT` (also needs `--allow-deposits`).
     Deposit,
+    /// Keymanager import (`--keymanager-import`): the one-time key import
+    /// and cluster lock upload. Grants no signing.
+    Import,
 }
 
 impl Role {
@@ -56,6 +59,7 @@ impl Role {
             "duties" => Some(Self::Duties),
             "exit" => Some(Self::Exit),
             "deposit" => Some(Self::Deposit),
+            "import" => Some(Self::Import),
             _ => None,
         }
     }
@@ -66,7 +70,7 @@ impl Role {
             .split(',')
             .map(|r| {
                 Self::parse(r)
-                    .with_context(|| format!("unknown role {r:?} (duties, exit, deposit)"))
+                    .with_context(|| format!("unknown role {r:?} (duties, exit, deposit, import)"))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
         roles.sort();
@@ -79,6 +83,7 @@ impl Role {
             Self::Duties => "duties",
             Self::Exit => "exit",
             Self::Deposit => "deposit",
+            Self::Import => "import",
         }
     }
 }
