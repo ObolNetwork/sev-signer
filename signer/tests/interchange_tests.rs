@@ -16,9 +16,9 @@
 
 use std::path::PathBuf;
 
+use dvtee::signing::SlashingCheck;
+use dvtee::slashing::{SlashingDb, SlashingError};
 use serde::Deserialize;
-use sev_signer::signing::SlashingCheck;
-use sev_signer::slashing::{SlashingDb, SlashingError};
 
 /// Number of test files in v5.3.0. Fewer means a broken fetch, not a pass.
 const EXPECTED_TESTS: usize = 38;

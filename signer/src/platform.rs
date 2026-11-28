@@ -11,7 +11,7 @@
 //!   its evidence `insecure_dev` so no verifier can mistake it for SNP.
 //!
 //! Sealing keys are domain separated per purpose:
-//! `HMAC-SHA256(root, "obol-sev-signer/sealing/v1" || 0x00 || purpose)`,
+//! `HMAC-SHA256(root, "obol-dvtee/sealing/v1" || 0x00 || purpose)`,
 //! where `root` is the SNP derived key (or the dev root key file).
 
 use std::path::PathBuf;
@@ -22,7 +22,7 @@ use zeroize::Zeroizing;
 
 use crate::tee::{self, Evidence, TeeError};
 
-const SEALING_DOMAIN: &[u8] = b"obol-sev-signer/sealing/v1";
+const SEALING_DOMAIN: &[u8] = b"obol-dvtee/sealing/v1";
 
 /// Backend selector for the CLI.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -37,11 +37,11 @@ pub enum PlatformKind {
 /// Platform flags shared by `serve` and `sealing-key`.
 #[derive(Clone, Debug, clap::Args)]
 pub struct PlatformArgs {
-    #[arg(long = "platform", env = "SEV_SIGNER_PLATFORM", value_enum, default_value_t = PlatformKind::Tee)]
+    #[arg(long = "platform", env = "DVTEE_PLATFORM", value_enum, default_value_t = PlatformKind::Tee)]
     pub kind: PlatformKind,
     /// Root key file for --platform insecure-dev (created if missing).
     /// Keep it outside the data dir; delete it to simulate a host move.
-    #[arg(long, env = "SEV_SIGNER_INSECURE_DEV_ROOT_KEY")]
+    #[arg(long, env = "DVTEE_INSECURE_DEV_ROOT_KEY")]
     pub insecure_dev_root_key: Option<PathBuf>,
 }
 

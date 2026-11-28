@@ -1,13 +1,13 @@
 name: release
 
-# On a `signer-v*` tag: build the sev-signer binary twice, from two different
+# On a `signer-v*` tag: build the dvtee binary twice, from two different
 # checkout paths, and fail unless the bytes match. Then attest its build
 # provenance (Sigstore, keyless, tied to this workflow and commit) and attach
 # it to a draft GitHub release with its SHA-256.
 #
 # Verify a download:
-#   sha256sum -c sev-signer-x86_64-unknown-linux-gnu.sha256
-#   gh attestation verify sev-signer-x86_64-unknown-linux-gnu --repo ObolNetwork/dvtee
+#   sha256sum -c dvtee-x86_64-unknown-linux-gnu.sha256
+#   gh attestation verify dvtee-x86_64-unknown-linux-gnu --repo ObolNetwork/dvtee
 # or rebuild it: check out the tag, install the toolchain in BUILD-TOOLCHAIN,
 # run signer/scripts/build-release.sh and compare the hash.
 
@@ -61,12 +61,12 @@ jobs:
           path: dists
       - name: Builds must be identical
         run: |
-          cmp dists/dist-a/sev-signer-x86_64-unknown-linux-gnu \
-              dists/dist-longer-checkout-path/sev-signer-x86_64-unknown-linux-gnu
-          cat dists/dist-a/sev-signer-x86_64-unknown-linux-gnu.sha256
+          cmp dists/dist-a/dvtee-x86_64-unknown-linux-gnu \
+              dists/dist-longer-checkout-path/dvtee-x86_64-unknown-linux-gnu
+          cat dists/dist-a/dvtee-x86_64-unknown-linux-gnu.sha256
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: dists/dist-a/sev-signer-x86_64-unknown-linux-gnu
+          subject-path: dists/dist-a/dvtee-x86_64-unknown-linux-gnu
       - name: Draft release
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -75,6 +75,6 @@ jobs:
         run: |
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
             --title "$TAG" --notes "Reproducible build; see .github/workflows/release.yml to verify." \
-            dists/dist-a/sev-signer-x86_64-unknown-linux-gnu \
-            dists/dist-a/sev-signer-x86_64-unknown-linux-gnu.sha256 \
+            dists/dist-a/dvtee-x86_64-unknown-linux-gnu \
+            dists/dist-a/dvtee-x86_64-unknown-linux-gnu.sha256 \
             dists/dist-a/BUILD-TOOLCHAIN

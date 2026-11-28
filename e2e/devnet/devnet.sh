@@ -1,35 +1,35 @@
 #!/usr/bin/env bash
-# Kurtosis devnet with a 3-of-4 charon DV where every operator signs through its own sev-signer.
+# Kurtosis devnet with a 3-of-4 charon DV where every operator signs through its own dvtee.
 #
 #   Kurtosis enclave: geth + Lighthouse BN, plus a Lighthouse VC with genesis keys 0..55
-#   relay ─┬─ pod0: charon0 + sev-signer0 + Lighthouse VC  (mTLS)
-#          ├─ pod1: charon1 + sev-signer1 + Teku VC        (mTLS)
-#          ├─ pod2: charon2 + sev-signer2 + Lodestar VC    (server TLS only: no client-cert option)
-#          └─ pod3: charon3 + sev-signer3 + Prysm VC       (server TLS only: no client-cert option)
+#   relay ─┬─ pod0: charon0 + dvtee0 + Lighthouse VC  (mTLS)
+#          ├─ pod1: charon1 + dvtee1 + Teku VC        (mTLS)
+#          ├─ pod2: charon2 + dvtee2 + Lodestar VC    (server TLS only: no client-cert option)
+#          └─ pod3: charon3 + dvtee3 + Prysm VC       (server TLS only: no client-cert option)
 #
 # Genesis keys 56..63 are split into the cluster, so the DV attests, aggregates, proposes and signs
 # sync-committee duties on a real chain. Each pod's containers share charon-i's network namespace: the
-# VC reaches charon at 127.0.0.1:3600 and sev-signer at https://127.0.0.1:9000, which matches the
+# VC reaches charon at 127.0.0.1:3600 and dvtee at https://127.0.0.1:9000, which matches the
 # signer certificate's SANs (localhost, 127.0.0.1).
 #
-#   CHARON=/path/to/charon SEV_SIGNER=/path/to/sev-signer e2e/devnet/devnet.sh [command]
+#   CHARON=/path/to/charon DVTEE=/path/to/dvtee e2e/devnet/devnet.sh [command]
 #
 # Commands (default: all):
 #   all      up, keys, cluster, pods, wait, summary, checks, down
 #   up       start the Kurtosis enclave and the relay, and fetch genesis
 #   keys     derive the DV keys from the genesis mnemonic and check they are active
 #   cluster  split them into a 3-of-4 charon cluster
-#   pods     start charon, sev-signer and the VCs
+#   pods     start charon, dvtee and the VCs
 #   wait     run until SLOTS slots past the pods' start
 #   summary  per-node sign counts and rejections, charon duty results, DV proposals and balances
 #   checks   400 + log line on a malformed request, SIGTERM restart timing, then a slashing replay (412)
 #   down     save logs to $WORKDIR/logs and remove every container and the enclave
 #
 # Environment:
-#   CHARON, SEV_SIGNER  host binaries (sev-signer built with --features insecure-dev)
+#   CHARON, DVTEE  host binaries (dvtee built with --features insecure-dev)
 #   KURTOSIS            Kurtosis CLI (default: kurtosis)
 #   ETH_PKG             ethereum-package locator (default: ObolNetwork fork 6.1.0-obol.6)
-#   ENCLAVE             enclave name (default: sev-signer-devnet); containers are named ${ENCLAVE}-*
+#   ENCLAVE             enclave name (default: dvtee-devnet); containers are named ${ENCLAVE}-*
 #   WORKDIR             state and logs (default: ./devnet-work)
 #   SLOTS               slots for `wait` (default: 160, i.e. 5 epochs)
 #   CHARON_DEBUG_NODES  node indices whose charon logs at debug, e.g. "1" (default: none)
@@ -38,7 +38,7 @@
 #   EL_IMAGE, CL_IMAGE  Kurtosis geth and Lighthouse BN/VC images (default: those in kurtosis-args.yaml)
 #   LIGHTHOUSE, TEKU, LODESTAR, PRYSM
 #                       DV validator client images (defaults below)
-#   SIGNER3_REMOTE      host:port of a sev-signer running elsewhere, e.g. in an SEV-SNP guest
+#   SIGNER3_REMOTE      host:port of a dvtee running elsewhere, e.g. in an SEV-SNP guest
 #                       (docs/hardware-runbook.md). pod3 then gets a TCP forwarder from 127.0.0.1:9000
 #                       to it instead of a local signer; TLS still ends in the remote signer.
 #   SIGNER3_CERT        with SIGNER3_REMOTE: that signer's certificate (from its attestation evidence)
@@ -47,12 +47,12 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CHARON=${CHARON:?path to charon (needs --testnet-capella-hard-fork)}
-SEV_SIGNER=${SEV_SIGNER:?path to sev-signer built with --features insecure-dev}
+DVTEE=${DVTEE:?path to dvtee built with --features insecure-dev}
 CHARON=$(realpath "$CHARON")
-SEV_SIGNER=$(realpath "$SEV_SIGNER")
+DVTEE=$(realpath "$DVTEE")
 KURTOSIS=${KURTOSIS:-kurtosis}
 ETH_PKG=${ETH_PKG:-github.com/ObolNetwork/ethereum-package@6.1.0-obol.6}
-ENCLAVE=${ENCLAVE:-sev-signer-devnet}
+ENCLAVE=${ENCLAVE:-dvtee-devnet}
 W=$(mkdir -p "${WORKDIR:-$PWD/devnet-work}" && realpath "${WORKDIR:-$PWD/devnet-work}")
 SLOTS=${SLOTS:-160}
 CHARON_DEBUG_NODES=${CHARON_DEBUG_NODES:-}
@@ -69,7 +69,7 @@ fi
 
 P=$ENCLAVE
 NET=kt-$ENCLAVE
-TOOLS=sev-signer-devnet-tools
+TOOLS=dvtee-devnet-tools
 LIGHTHOUSE=${LIGHTHOUSE:-sigp/lighthouse:v8.3.3}
 TEKU=${TEKU:-consensys/teku:26.10.3}
 LODESTAR=${LODESTAR:-chainsafe/lodestar:v1.50.1}
@@ -123,7 +123,7 @@ GFV=$(cfg GENESIS_FORK_VERSION)
 CFV=$(cfg CAPELLA_FORK_VERSION)
 CHAIN_ID=$(cfg DEPOSIT_CHAIN_ID)
 EOF
-  # sev-signer takes its fork schedule from this file (--network <config.yaml>).
+  # dvtee takes its fork schedule from this file (--network <config.yaml>).
   local ge; ge=$(cfg GLOAS_FORK_EPOCH)
   [[ ${ge:-18446744073709551615} == "$GLOAS_EPOCH" ]] || die "genesis config.yaml has GLOAS_FORK_EPOCH $ge, want $GLOAS_EPOCH"
   cat "$W/env" >&2
@@ -214,11 +214,11 @@ signer_up() {
   fi
   mkdir -p "$W/run/node$i/signer-data"
   docker run -d --name "$P-signer$i" --network "container:$P-charon$i" --memory 256m "${U[@]}" "${LOGOPT[@]}" \
-    -e RUST_LOG=sev_signer=debug,tower_http=info \
-    -v "$SEV_SIGNER:/usr/local/bin/sev-signer:ro" -v "$W/cluster/node$i/validator_keys:/keys:ro" \
+    -e RUST_LOG=dvtee=debug,tower_http=info \
+    -v "$DVTEE:/usr/local/bin/dvtee:ro" -v "$W/cluster/node$i/validator_keys:/keys:ro" \
     -v "$W/cluster/node$i/cluster-lock.json:/cluster-lock.json:ro" \
     -v "$W/run/node$i:/node" -v "$W/genesis:/genesis:ro" "$TOOLS" \
-    sev-signer serve --platform insecure-dev --insecure-dev-root-key /node/dev-root.key \
+    dvtee serve --platform insecure-dev --insecure-dev-root-key /node/dev-root.key \
     --network /genesis/config.yaml --genesis-validators-root "$GVR" \
     --keystores-dir /keys --data-dir /node/signer-data --cluster-lock /cluster-lock.json \
     --listen 127.0.0.1:9000 --public-listen 0.0.0.0:9001 "${mtls[@]}" >/dev/null
@@ -250,7 +250,7 @@ EOF
     ;;
   1) # Teku: PKCS#12 client keystore, and a PKCS#12 truststore built with the image's keytool.
     docker run --rm --network none "${U[@]}" -v "$n:/node" --entrypoint keytool $TEKU \
-      -importcert -noprompt -alias sev-signer -file /node/signer-data/tls/cert.pem \
+      -importcert -noprompt -alias dvtee -file /node/signer-data/tls/cert.pem \
       -keystore /node/client/truststore.p12 -storetype PKCS12 -storepass devnet-trust >/dev/null 2>&1
     printf devnet-trust >"$n/client/truststore-pass.txt"
     docker run -d --name "$P-vc1" --network "container:$P-charon1" --memory 1g "${U[@]}" "${LOGOPT[@]}" \
@@ -335,7 +335,7 @@ summary() {
   env_load
   local head; head=$(head_slot)
   echo "== head slot $head (pods started at $PODS_SLOT)"
-  echo "== sev-signer: rejected (400/403), refused (412), signed by kind"
+  echo "== dvtee: rejected (400/403), refused (412), signed by kind"
   signer_counts
   # charon's tracker metrics stay at 0 in this setup, so duty outcomes come from the logs: distinct
   # duty slots charon broadcast, and the tracker's "Duty failed" lines.

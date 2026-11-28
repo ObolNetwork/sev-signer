@@ -2,7 +2,7 @@
 # Prints the expected SEV-SNP launch measurement (the report's MEASUREMENT)
 # for the guest image and the launch parameters in snp-params.env.
 #
-#   scripts/expected-measurement.sh [--uki out/image/sev-signer.efi]
+#   scripts/expected-measurement.sh [--uki out/image/dvtee.efi]
 #       [--ovmf out/ovmf/OVMF.fd] [--append CMDLINE] [--json] [--dry-run]
 #
 # Inputs that must match the launch exactly (launch-snp-guest.sh uses the
@@ -25,7 +25,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source-path=SCRIPTDIR source=snp-params.env
 . "$ROOT/scripts/snp-params.env"
 
-UKI=$ROOT/out/image/sev-signer.efi
+UKI=$ROOT/out/image/dvtee.efi
 OVMF=$ROOT/out/ovmf/OVMF.fd
 APPEND=
 JSON=

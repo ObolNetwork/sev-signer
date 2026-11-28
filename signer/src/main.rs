@@ -7,14 +7,14 @@ use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
 use sha2::{Digest, Sha256};
 
-use sev_signer::anti_rollback::{self, TrustedClock};
-use sev_signer::api::{self, AppState};
-use sev_signer::network::{self, Network};
-use sev_signer::pins::Pins;
-use sev_signer::platform::{PlatformArgs, SnpKeyParams};
-use sev_signer::signing::Policy;
-use sev_signer::slashing::SlashingDb;
-use sev_signer::{keystore, snp, tee, tls};
+use dvtee::anti_rollback::{self, TrustedClock};
+use dvtee::api::{self, AppState};
+use dvtee::network::{self, Network};
+use dvtee::pins::Pins;
+use dvtee::platform::{PlatformArgs, SnpKeyParams};
+use dvtee::signing::Policy;
+use dvtee::slashing::SlashingDb;
+use dvtee::{keystore, snp, tee, tls};
 
 /// Web3Signer-compatible BLS remote signer designed to run inside a
 /// confidential VM (AMD SEV-SNP today; Intel TDX / Arm CCA via configfs-tsm).
@@ -31,11 +31,7 @@ enum Cmd {
     Serve(Box<ServeArgs>),
     /// Print the slashing protection database as EIP-3076 interchange JSON.
     SlashingExport {
-        #[arg(
-            long,
-            env = "SEV_SIGNER_DATA_DIR",
-            default_value = "/var/lib/sev-signer"
-        )]
+        #[arg(long, env = "DVTEE_DATA_DIR", default_value = "/var/lib/dvtee")]
         data_dir: PathBuf,
         #[command(flatten)]
         network: NetworkArgs,
@@ -50,10 +46,10 @@ enum Cmd {
         /// Minimum TCB_VERSION mixed into the SNP key, as the raw 64-bit hex
         /// value from an attestation report (its encoding varies by CPU
         /// generation). Required for --platform tee.
-        #[arg(long, env = "SEV_SIGNER_SNP_MIN_TCB", value_parser = parse_hex_u64)]
+        #[arg(long, env = "DVTEE_SNP_MIN_TCB", value_parser = parse_hex_u64)]
         snp_min_tcb: Option<u64>,
         /// VMPL mixed into the SNP key; must be >= the guest's own VMPL.
-        #[arg(long, env = "SEV_SIGNER_SNP_VMPL", default_value_t = 0)]
+        #[arg(long, env = "DVTEE_SNP_VMPL", default_value_t = 0)]
         snp_vmpl: u32,
         #[command(flatten)]
         platform: PlatformArgs,
@@ -120,15 +116,15 @@ struct NetworkArgs {
     /// config file needs --genesis-validators-root. The older
     /// custom:<gvr>:<genesis_fork>:<capella_fork> form still works but has no
     /// fork schedule, so Gloas request types are refused on it.
-    #[arg(long, env = "SEV_SIGNER_NETWORK", value_name = "NAME|CONFIG.YAML")]
+    #[arg(long, env = "DVTEE_NETWORK", value_name = "NAME|CONFIG.YAML")]
     network: String,
     /// Genesis validators root, hex. Required with a config.yaml --network,
     /// because the config file doesn't contain it.
-    #[arg(long, env = "SEV_SIGNER_GENESIS_VALIDATORS_ROOT")]
+    #[arg(long, env = "DVTEE_GENESIS_VALIDATORS_ROOT")]
     genesis_validators_root: Option<String>,
     /// Genesis time (Unix seconds) of a config.yaml or custom: network, for
     /// the anti-rollback start floor. Presets know their own.
-    #[arg(long, env = "SEV_SIGNER_GENESIS_TIME")]
+    #[arg(long, env = "DVTEE_GENESIS_TIME")]
     genesis_time: Option<u64>,
 }
 
@@ -178,47 +174,43 @@ impl NetworkArgs {
 
 #[derive(clap::Args)]
 struct ServeArgs {
-    #[arg(long, env = "SEV_SIGNER_LISTEN", default_value = "127.0.0.1:9000")]
+    #[arg(long, env = "DVTEE_LISTEN", default_value = "127.0.0.1:9000")]
     listen: SocketAddr,
     /// Holds the slashing protection database and TLS key. Must be on the
     /// encrypted, measured disk in a TEE deployment.
-    #[arg(
-        long,
-        env = "SEV_SIGNER_DATA_DIR",
-        default_value = "/var/lib/sev-signer"
-    )]
+    #[arg(long, env = "DVTEE_DATA_DIR", default_value = "/var/lib/dvtee")]
     data_dir: PathBuf,
     /// EIP-2335 keystores with sibling .txt password files (charon's
     /// validator_keys layout).
-    #[arg(long, env = "SEV_SIGNER_KEYSTORES_DIR")]
+    #[arg(long, env = "DVTEE_KEYSTORES_DIR")]
     keystores_dir: PathBuf,
     #[command(flatten)]
     network: NetworkArgs,
     /// Serve plain HTTP. Only for development: TLS must terminate inside the
     /// TEE for attestation to mean anything.
-    #[arg(long, env = "SEV_SIGNER_INSECURE_HTTP")]
+    #[arg(long, env = "DVTEE_INSECURE_HTTP")]
     insecure_http: bool,
     /// Subject alternative names for the generated TLS certificate.
-    #[arg(long = "tls-san", env = "SEV_SIGNER_TLS_SANS", value_delimiter = ',', default_values_t = ["localhost".to_string(), "127.0.0.1".to_string()])]
+    #[arg(long = "tls-san", env = "DVTEE_TLS_SANS", value_delimiter = ',', default_values_t = ["localhost".to_string(), "127.0.0.1".to_string()])]
     tls_sans: Vec<String>,
     /// Require client certificates whose SHA-256 fingerprints are listed in
     /// this file (Web3Signer knownClients format).
-    #[arg(long, env = "SEV_SIGNER_TLS_KNOWN_CLIENTS")]
+    #[arg(long, env = "DVTEE_TLS_KNOWN_CLIENTS")]
     tls_known_clients: Option<PathBuf>,
     /// Bearer tokens required on /api/v1/eth2/*, one per line:
     /// `<name> <token> [roles]` (roles as in knownClients, default `duties`).
     /// Validator clients send one as the password in the signer URL
     /// (`https://vc:<token>@host:port`) or as `Authorization: Bearer`.
-    #[arg(long, env = "SEV_SIGNER_AUTH_TOKEN_FILE")]
+    #[arg(long, env = "DVTEE_AUTH_TOKEN_FILE")]
     auth_token_file: Option<PathBuf>,
     /// Second TLS listener serving only /upcheck, /healthcheck and
     /// /api/v1/tee/attestation, without client certificates, so peers and
     /// monitoring can fetch evidence while signing stays behind mTLS.
-    #[arg(long, env = "SEV_SIGNER_PUBLIC_LISTEN")]
+    #[arg(long, env = "DVTEE_PUBLIC_LISTEN")]
     public_listen: Option<SocketAddr>,
-    #[arg(long, env = "SEV_SIGNER_ALLOW_VOLUNTARY_EXITS", default_value_t = true, action = clap::ArgAction::Set)]
+    #[arg(long, env = "DVTEE_ALLOW_VOLUNTARY_EXITS", default_value_t = true, action = clap::ArgAction::Set)]
     allow_voluntary_exits: bool,
-    #[arg(long, env = "SEV_SIGNER_ALLOW_DEPOSITS", default_value_t = false, action = clap::ArgAction::Set)]
+    #[arg(long, env = "DVTEE_ALLOW_DEPOSITS", default_value_t = false, action = clap::ArgAction::Set)]
     allow_deposits: bool,
     /// Charon cluster-lock.json to pin on first start. The signer checks it,
     /// requires every loaded key to be one of its public shares (at one
@@ -226,37 +218,37 @@ struct ServeArgs {
     /// refuses any other lock. Fee recipients in registrations, proposer
     /// preferences and self-built payloads must match it. Optional once
     /// pinned.
-    #[arg(long, env = "SEV_SIGNER_CLUSTER_LOCK")]
+    #[arg(long, env = "DVTEE_CLUSTER_LOCK")]
     cluster_lock: Option<PathBuf>,
     /// Anti-rollback start floor and horizon from Roughtime (see README).
     /// Defaults to on for mainnet, hoodi and sepolia, and off for devnets. It
     /// can only be turned off for a public network in an insecure-dev build.
-    #[arg(long, env = "SEV_SIGNER_ANTI_ROLLBACK", action = clap::ArgAction::Set)]
+    #[arg(long, env = "DVTEE_ANTI_ROLLBACK", action = clap::ArgAction::Set)]
     anti_rollback: Option<bool>,
     /// k: never sign a block or attestation more than k epochs ahead of
     /// trusted time. After a start, everything up to epoch clock + k + 1 is
     /// refused.
-    #[arg(long, env = "SEV_SIGNER_ANTI_ROLLBACK_EPOCHS", default_value_t = 1,
+    #[arg(long, env = "DVTEE_ANTI_ROLLBACK_EPOCHS", default_value_t = 1,
           value_parser = clap::value_parser!(u64).range(1..=anti_rollback::MAX_K))]
     anti_rollback_epochs: u64,
     /// Roughtime servers as BASE64KEY@host:port (comma-separated). Defaults
     /// to five independent public servers.
     #[arg(
         long = "roughtime-server",
-        env = "SEV_SIGNER_ROUGHTIME_SERVERS",
+        env = "DVTEE_ROUGHTIME_SERVERS",
         value_delimiter = ','
     )]
     roughtime_servers: Vec<anti_rollback::Server>,
     /// How many servers must agree.
-    #[arg(long, env = "SEV_SIGNER_ROUGHTIME_QUORUM", default_value_t = 3)]
+    #[arg(long, env = "DVTEE_ROUGHTIME_QUORUM", default_value_t = 3)]
     roughtime_quorum: usize,
     /// Maximum spread of the agreeing servers' times, seconds.
-    #[arg(long, env = "SEV_SIGNER_ROUGHTIME_TOLERANCE", default_value_t = 10)]
+    #[arg(long, env = "DVTEE_ROUGHTIME_TOLERANCE", default_value_t = 10)]
     roughtime_tolerance: u64,
     /// EIP-3076 interchange file to import before serving.
-    #[arg(long, env = "SEV_SIGNER_SLASHING_PROTECTION_IMPORT")]
+    #[arg(long, env = "DVTEE_SLASHING_PROTECTION_IMPORT")]
     slashing_protection_import: Option<PathBuf>,
-    #[arg(long, env = "SEV_SIGNER_LOG_JSON")]
+    #[arg(long, env = "DVTEE_LOG_JSON")]
     log_json: bool,
     #[command(flatten)]
     platform: PlatformArgs,
@@ -369,7 +361,7 @@ async fn serve(args: ServeArgs) -> anyhow::Result<()> {
 
     let tokens = match &args.auth_token_file {
         Some(path) => {
-            let t = sev_signer::auth::Tokens::load(path)?;
+            let t = dvtee::auth::Tokens::load(path)?;
             if tls.is_none() {
                 tracing::warn!("auth tokens over plain HTTP are visible to the network");
             }
@@ -409,7 +401,7 @@ async fn serve(args: ServeArgs) -> anyhow::Result<()> {
         tls = tls.is_some(),
         mtls = args.tls_known_clients.is_some(),
         tokens = state.tokens.as_ref().map_or(0, |t| t.len()),
-        "sev-signer serving"
+        "dvtee serving"
     );
 
     let handle = axum_server::Handle::new();
@@ -798,7 +790,7 @@ fn kds_get(url: &str) -> anyhow::Result<Vec<u8>> {
     let mut tls = rustls::StreamOwned::new(conn, sock);
     write!(
         tls,
-        "GET /{path} HTTP/1.0\r\nHost: {host}\r\nAccept: application/octet-stream\r\nUser-Agent: sev-signer\r\n\r\n"
+        "GET /{path} HTTP/1.0\r\nHost: {host}\r\nAccept: application/octet-stream\r\nUser-Agent: dvtee\r\n\r\n"
     )?;
     let mut resp = Vec::new();
     // HTTP/1.0: the body ends when the server closes the connection.

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Opens the sealed data disk in the initrd, and creates it on first boot.
 #
-# The key is `sev-signer sealing-key`: an SNP derived key over MEASUREMENT,
+# The key is `dvtee sealing-key`: an SNP derived key over MEASUREMENT,
 # POLICY and a pinned minimum TCB, so only this measured image, launched with
 # the same policy on the same chip, can open the disk. There is no fallback
 # key. Any failure exits non-zero, and the unit powers the guest off.
@@ -16,24 +16,24 @@
 set -euo pipefail
 umask 077
 
-DEV=${SEV_SIGNER_DATA_DEV:-/dev/disk/by-id/virtio-sev-signer-data}
-NAME=${SEV_SIGNER_DATA_NAME:-sev-signer-data}
-MIN_TCB_FILE=${SEV_SIGNER_MIN_TCB_FILE:-/usr/lib/sev-signer/snp-min-tcb}
-RUN_DIR=${SEV_SIGNER_RUN_DIR:-/run/sev-signer}
-SEV_SIGNER=${SEV_SIGNER_BIN:-/usr/bin/sev-signer}
+DEV=${DVTEE_DATA_DEV:-/dev/disk/by-id/virtio-dvtee-data}
+NAME=${DVTEE_DATA_NAME:-dvtee-data}
+MIN_TCB_FILE=${DVTEE_MIN_TCB_FILE:-/usr/lib/dvtee/snp-min-tcb}
+RUN_DIR=${DVTEE_RUN_DIR:-/run/dvtee}
+DVTEE=${DVTEE_BIN:-/usr/bin/dvtee}
 CRYPTSETUP=${CRYPTSETUP:-cryptsetup}
 MKFS=${MKFS_EXT4:-mkfs.ext4}
 SEV_GUEST_DEV=${SEV_GUEST_DEV:-/dev/sev-guest}
-WAIT_SECS=${SEV_SIGNER_WAIT_SECS:-60}
-MAPPER=${SEV_SIGNER_MAPPER_DIR:-/dev/mapper}
+WAIT_SECS=${DVTEE_WAIT_SECS:-60}
+MAPPER=${DVTEE_MAPPER_DIR:-/dev/mapper}
 
 # LUKS2 labels: "init" until the filesystem exists, so a crash between
 # luksFormat and mkfs is finished on the next boot instead of failing forever.
-LABEL_INIT=sev-signer-init
-LABEL_DONE=sev-signer-data
+LABEL_INIT=dvtee-init
+LABEL_DONE=dvtee-data
 BLANK_BYTES=$((16 << 20))
 
-log() { echo "sev-signer-unlock: $*" >&2; }
+log() { echo "dvtee-unlock: $*" >&2; }
 die() { log "FAILED: $*"; exit 1; }
 
 wait_for() { # path test-flag
@@ -47,7 +47,7 @@ wait_for() { # path test-flag
 
 key_file() {
 	local k=$RUN_DIR/data.key
-	"$SEV_SIGNER" sealing-key --purpose data-disk --snp-min-tcb "$MIN_TCB" --snp-vmpl 0 >"$k" \
+	"$DVTEE" sealing-key --purpose data-disk --snp-min-tcb "$MIN_TCB" --snp-vmpl 0 >"$k" \
 		|| die "sealing-key failed (wrong chip, policy or minimum TCB?)"
 	[[ $(stat -c %s "$k") == 32 ]] || die "sealing key is not 32 bytes"
 	echo "$k"
@@ -77,7 +77,7 @@ main() {
 
 	modprobe sev-guest 2>/dev/null || true
 	wait_for "$SEV_GUEST_DEV" -e || die "$SEV_GUEST_DEV missing: not an SNP guest?"
-	wait_for "$DEV" -e || die "data disk $DEV missing (attach it with serial=sev-signer-data)"
+	wait_for "$DEV" -e || die "data disk $DEV missing (attach it with serial=dvtee-data)"
 	log "data disk $DEV, minimum TCB $MIN_TCB"
 
 	local key label
@@ -90,7 +90,7 @@ main() {
 		label=$("$CRYPTSETUP" luksDump "$DEV" | sed -n 's/^Label:[[:space:]]*//p')
 		if [[ $label == "$LABEL_INIT" ]]; then
 			log "finishing an interrupted first boot"
-			"$MKFS" -q -F -L sev-signer -m 0 "$MAPPER/$NAME" || die "mkfs failed"
+			"$MKFS" -q -F -L dvtee -m 0 "$MAPPER/$NAME" || die "mkfs failed"
 			"$CRYPTSETUP" config --label "$LABEL_DONE" "$DEV" || die "cannot set label"
 		fi
 		log "opened"
@@ -109,7 +109,7 @@ main() {
 		|| die "cannot open the new data disk"
 	rm -f "$key"
 	check_mapping
-	"$MKFS" -q -F -L sev-signer -m 0 "$MAPPER/$NAME" || die "mkfs failed"
+	"$MKFS" -q -F -L dvtee -m 0 "$MAPPER/$NAME" || die "mkfs failed"
 	"$CRYPTSETUP" config --label "$LABEL_DONE" "$DEV" || die "cannot set label"
 	log "created and opened"
 }

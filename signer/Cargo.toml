@@ -1,5 +1,5 @@
 [package]
-name = "sev-signer"
+name = "dvtee"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
@@ -56,7 +56,7 @@ libc = "0.2.191"
 # Software stand-in for the TEE (no security) for development and e2e tests
 # on machines without SEV-SNP. Never enabled in release images.
 insecure-dev = []
-# The `sev-signer-load` load test tool (docs/load-test.md).
+# The `dvtee-load` load test tool (docs/load-test.md).
 load-test = [
     "dep:http-body-util",
     "dep:hyper",
@@ -66,8 +66,8 @@ load-test = [
 ]
 
 [[bin]]
-name = "sev-signer-load"
-path = "src/bin/sev-signer-load/main.rs"
+name = "dvtee-load"
+path = "src/bin/dvtee-load/main.rs"
 required-features = ["load-test"]
 
 [dev-dependencies]

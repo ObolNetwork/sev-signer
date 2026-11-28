@@ -1,6 +1,6 @@
 #!/bin/bash
 # Unit tests for the guest's boot scripts, with stub cryptsetup, mkfs and
-# sev-signer. Needs only bash, GNU tar and coreutils:
+# dvtee. Needs only bash, GNU tar and coreutils:
 #
 #   image/tests/run.sh
 #
@@ -11,9 +11,9 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-UNLOCK=$REPO/image/mkosi.initrd.conf/mkosi.extra/usr/lib/sev-signer/unlock
-PROVISION=$REPO/image/mkosi.extra/usr/lib/sev-signer/provision
-START=$REPO/image/mkosi.extra/usr/lib/sev-signer/start
+UNLOCK=$REPO/image/mkosi.initrd.conf/mkosi.extra/usr/lib/dvtee/unlock
+PROVISION=$REPO/image/mkosi.extra/usr/lib/dvtee/provision
+START=$REPO/image/mkosi.extra/usr/lib/dvtee/start
 MKDISK=$REPO/scripts/make-provision-disk.sh
 
 T=$(mktemp -d)
@@ -60,13 +60,13 @@ cat >"$STUBS/mkfs.ext4" <<'EOF'
 #!/bin/bash
 echo "mkfs.ext4 $*" >>"$STATE/log"
 EOF
-cat >"$STUBS/sev-signer" <<'EOF'
+cat >"$STUBS/dvtee" <<'EOF'
 #!/bin/bash
 # sealing-key: prints $STATE/sealkey, or fails if it is missing.
 # serve: records its arguments and environment.
 case $1 in
 sealing-key)
-	echo "sev-signer $*" >>"$STATE/log"
+	echo "dvtee $*" >>"$STATE/log"
 	[[ -e $STATE/sealkey ]] || { echo "SNP derived key: firmware status 0x16" >&2; exit 1; }
 	cat "$STATE/sealkey" ;;
 serve)
@@ -90,9 +90,9 @@ unlock_env() {
 }
 run_unlock() {
 	PATH=$STUBS:$PATH \
-		SEV_SIGNER_DATA_DEV=$STATE/disk SEV_SIGNER_MIN_TCB_FILE=$STATE/tcb \
-		SEV_SIGNER_RUN_DIR=$STATE/run SEV_SIGNER_BIN=$STUBS/sev-signer \
-		SEV_GUEST_DEV=$STATE/sev-guest SEV_SIGNER_WAIT_SECS=1 SEV_SIGNER_MAPPER_DIR=$STATE/mapper \
+		DVTEE_DATA_DEV=$STATE/disk DVTEE_MIN_TCB_FILE=$STATE/tcb \
+		DVTEE_RUN_DIR=$STATE/run DVTEE_BIN=$STUBS/dvtee \
+		SEV_GUEST_DEV=$STATE/sev-guest DVTEE_WAIT_SECS=1 DVTEE_MAPPER_DIR=$STATE/mapper \
 		"$UNLOCK" >"$STATE/out" 2>&1
 }
 logged() { grep -q -- "$1" "$STATE/log"; }
@@ -103,8 +103,8 @@ check "unlock: blank disk is formatted" run_unlock
 check "unlock: AEAD parameters" logged 'luksFormat --batch-mode --type luks2 --cipher aegis128-random --key-size 128 --integrity aead'
 check "unlock: cheap PBKDF for a random key" logged '--pbkdf pbkdf2 --pbkdf-force-iterations 1000'
 check "unlock: min TCB passed to sealing-key" logged 'sealing-key --purpose data-disk --snp-min-tcb 0x0000000000000000 --snp-vmpl 0'
-check "unlock: filesystem created" logged "mkfs.ext4 -q -F -L sev-signer -m 0 $STATE/mapper/sev-signer-data"
-check "unlock: label marks setup done" grep -qx sev-signer-data "$STATE/label"
+check "unlock: filesystem created" logged "mkfs.ext4 -q -F -L dvtee -m 0 $STATE/mapper/dvtee-data"
+check "unlock: label marks setup done" grep -qx dvtee-data "$STATE/label"
 check "unlock: key file removed" no_key_left
 
 # Second boot on the same disk: open only.
@@ -155,11 +155,11 @@ run_unlock
 printf '  type:    LUKS2\n  cipher:  aes-xts-plain64\n  keysize: 512 bits\n' >"$STATE/status"
 : >"$STATE/log"
 check "unlock: a header rewritten to a non-AEAD cipher is refused" fails run_unlock
-check "unlock: the weak mapping is closed" logged 'cryptsetup close sev-signer-data'
+check "unlock: the weak mapping is closed" logged 'cryptsetup close dvtee-data'
 
 unlock_env interrupted
 run_unlock
-echo sev-signer-init >"$STATE/label"
+echo dvtee-init >"$STATE/label"
 : >"$STATE/log"
 check "unlock: interrupted first boot is finished" run_unlock
 check "unlock: ... with mkfs" logged mkfs.ext4
@@ -178,7 +178,7 @@ prov_env() {
 	rm -rf "$PSTATE" && mkdir -p "$PSTATE/data" "$PSTATE/run"
 }
 run_provision() {
-	SEV_SIGNER_DATA=$PSTATE/data SEV_SIGNER_PROV_DEV=$1 SEV_SIGNER_RUN_DIR=$PSTATE/run SEV_SIGNER_WAIT_SECS=1 \
+	DVTEE_DATA=$PSTATE/data DVTEE_PROV_DEV=$1 DVTEE_RUN_DIR=$PSTATE/run DVTEE_WAIT_SECS=1 \
 		"$PROVISION" >"$PSTATE/out" 2>&1
 }
 # A hand-made archive from a directory: tar_of DIR OUT [extra tar args]
@@ -200,8 +200,8 @@ serve_stub() {
 }
 run_start() {
 	serve_stub
-	SEV_SIGNER_INSECURE_HTTP=true SEV_SIGNER_ALLOW_DEPOSITS=true SEV_SIGNER_DATA=$PSTATE/data \
-		SEV_SIGNER_BIN=$PSTATE/serve-stub "$START" >"$PSTATE/start-out" 2>&1
+	DVTEE_INSECURE_HTTP=true DVTEE_ALLOW_DEPOSITS=true DVTEE_DATA=$PSTATE/data \
+		DVTEE_BIN=$PSTATE/serve-stub "$START" >"$PSTATE/start-out" 2>&1
 }
 check "start: runs" run_start
 args=$(tr '\n' ' ' <"$PSTATE/serve-args" 2>/dev/null)
@@ -209,8 +209,8 @@ check "start: tee platform" grep -q -- '--platform tee' <<<"$args"
 check "start: listeners" grep -q -- '--listen 0.0.0.0:9000 --public-listen 0.0.0.0:9001' <<<"$args"
 check "start: devnet network" grep -q -- "--network $PSTATE/data/config/config.yaml --genesis-validators-root $GVR" <<<"$args"
 check "start: tls sans" grep -q -- '--tls-san localhost,127.0.0.1' <<<"$args"
-check "start: no SEV_SIGNER_* in the environment" fails grep -q '^SEV_SIGNER_' "$PSTATE/serve-env"
-check "start: debug log level" grep -qx 'RUST_LOG=sev_signer=debug,tower_http=info' "$PSTATE/serve-env"
+check "start: no DVTEE_* in the environment" fails grep -q '^DVTEE_' "$PSTATE/serve-env"
+check "start: debug log level" grep -qx 'RUST_LOG=dvtee=debug,tower_http=info' "$PSTATE/serve-env"
 
 prov_env hoodi
 echo '{"lock_hash":"0x00"}' >"$T/lock.json"
@@ -223,7 +223,7 @@ check "start: preset network" grep -q -- '--network hoodi' <<<"$args"
 check "start: known clients" grep -q -- "--tls-known-clients $PSTATE/data/config/knownClients.txt" <<<"$args"
 check "start: cluster lock" grep -q -- "--cluster-lock $PSTATE/data/config/cluster-lock.json" <<<"$args"
 check "start: auth tokens" grep -q -- "--auth-token-file $PSTATE/data/config/tokens.txt" <<<"$args"
-check "start: default log level" grep -qx 'RUST_LOG=sev_signer=info,tower_http=warn' "$PSTATE/serve-env"
+check "start: default log level" grep -qx 'RUST_LOG=dvtee=info,tower_http=warn' "$PSTATE/serve-env"
 
 # Hostile archives: each must be rejected and leave no marker.
 reject() { # description, archive
@@ -244,7 +244,7 @@ d=$T/h-hardlink; good_tree "$d"; ln "$d/config/network" "$d/config/knownClients.
 tar_of "$d" "$T/hardlink.tar" validator_keys config
 reject "a hard link" "$T/hardlink.tar"
 
-d=$T/h-extra; good_tree "$d"; echo 'SEV_SIGNER_INSECURE_HTTP=true' >"$d/config/env"
+d=$T/h-extra; good_tree "$d"; echo 'DVTEE_INSECURE_HTTP=true' >"$d/config/env"
 tar_of "$d" "$T/extra.tar" validator_keys config
 reject "an unexpected file" "$T/extra.tar"
 

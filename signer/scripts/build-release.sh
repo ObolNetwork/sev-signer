@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reproducible release build of the sev-signer binary.
+# Reproducible release build of the dvtee binary.
 #
 # The same source, toolchain and target give the same bytes, whatever the
 # checkout path or user: paths are remapped, symbols stripped, and codegen is
@@ -24,8 +24,8 @@ export CARGO_PROFILE_RELEASE_INCREMENTAL=false
 export RUSTFLAGS="--remap-path-prefix=$src=/build --remap-path-prefix=$cargo_home=/cargo -C link-arg=-Wl,--build-id=none"
 unset RUSTC_WRAPPER
 
-cargo build --locked --release --target "$target" --bin sev-signer
+cargo build --locked --release --target "$target" --bin dvtee
 mkdir -p "$out"
-cp "${CARGO_TARGET_DIR:-target}/$target/release/sev-signer" "$out/sev-signer-$target"
-(cd "$out" && sha256sum "sev-signer-$target" | tee "sev-signer-$target.sha256")
+cp "${CARGO_TARGET_DIR:-target}/$target/release/dvtee" "$out/dvtee-$target"
+(cd "$out" && sha256sum "dvtee-$target" | tee "dvtee-$target.sha256")
 rustc --version >"$out/BUILD-TOOLCHAIN"

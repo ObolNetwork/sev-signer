@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Load test in one command (see ../docs/load-test.md). Builds sev-signer and
-# sev-signer-load, then runs:
+# Load test in one command (see ../docs/load-test.md). Builds dvtee and
+# dvtee-load, then runs:
 #   1. in-process micro benchmarks (BLS signing, watermark fsync) on WORK_DIR;
 #   2. the realistic duty mix for each key count in SIZES;
 #   3. a stress ramp: STRESS_KEYS keys, ATTESTERS of them attesting per slot,
@@ -51,7 +51,7 @@ fi
 OUT="$WORK_DIR/results-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$OUT"
 {
-  echo "# sev-signer load test, $(date -u +%FT%TZ), profile $BUILD"
+  echo "# dvtee load test, $(date -u +%FT%TZ), profile $BUILD"
   echo "commit: $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   echo "cpu: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs), $(nproc) threads"
   echo "kernel: $(uname -r)"
@@ -63,11 +63,11 @@ common=(--work-dir "$WORK_DIR" --slot-ms "$SLOT_MS" --budget-ms "$BUDGET_MS"
 # shellcheck disable=SC2206
 common+=($EXTRA)
 
-"$BIN/sev-signer-load" micro --dir "$WORK_DIR" | tee "$OUT/micro.md"
+"$BIN/dvtee-load" micro --dir "$WORK_DIR" | tee "$OUT/micro.md"
 
 # Disk sync stalls, logged per second next to each run.
 probe_start() {
-  "$BIN/sev-signer-load" probe --dir "$WORK_DIR" --secs 100000 >"$OUT/probe-$1.csv" &
+  "$BIN/dvtee-load" probe --dir "$WORK_DIR" --secs 100000 >"$OUT/probe-$1.csv" &
   PROBE=$!
 }
 probe_stop() {
@@ -78,7 +78,7 @@ trap probe_stop EXIT
 
 for n in $SIZES; do
   probe_start "keys-$n"
-  "$BIN/sev-signer-load" run --keys "$n" --epochs "$EPOCHS" "${common[@]}" |
+  "$BIN/dvtee-load" run --keys "$n" --epochs "$EPOCHS" "${common[@]}" |
     tee -a "$OUT/realistic.md"
   probe_stop
 done
@@ -86,7 +86,7 @@ done
 for k in $ATTESTERS; do
   probe_start "stress-$k"
   pass=1
-  "$BIN/sev-signer-load" run --keys "$STRESS_KEYS" --attesters-per-slot "$k" \
+  "$BIN/dvtee-load" run --keys "$STRESS_KEYS" --attesters-per-slot "$k" \
     --epochs "$STRESS_EPOCHS" "${common[@]}" | tee -a "$OUT/stress.md" |
     grep 'verdict: PASS' >/dev/null || pass=0
   probe_stop

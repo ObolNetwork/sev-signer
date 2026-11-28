@@ -50,7 +50,7 @@ measure: ovmf-image
 image:
 	image/build.sh
 
-# Expected launch measurement of out/image/sev-signer.efi with out/ovmf/OVMF.fd.
+# Expected launch measurement of out/image/dvtee.efi with out/ovmf/OVMF.fd.
 image-measure: ovmf-image
 	scripts/expected-measurement.sh --json
 

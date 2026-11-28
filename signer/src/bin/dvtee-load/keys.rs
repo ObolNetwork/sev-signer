@@ -22,7 +22,7 @@ fn random_password() -> anyhow::Result<String> {
 
 fn ikm(i: usize) -> [u8; 32] {
     Sha256::new()
-        .chain_update(b"sev-signer-load key ")
+        .chain_update(b"dvtee-load key ")
         .chain_update((i as u64).to_le_bytes())
         .finalize()
         .into()
@@ -60,7 +60,7 @@ fn keystore_json(i: usize, password: &str) -> anyhow::Result<(String, [u8; 48])>
                 "message": hex::encode(&ct),
             },
         },
-        "description": "sev-signer load test key (public seed, do not use)",
+        "description": "dvtee load test key (public seed, do not use)",
         "pubkey": hex::encode(pk),
         "path": "",
         "uuid": format!("00000000-0000-4000-8000-{i:012x}"),
@@ -115,7 +115,7 @@ mod tests {
     fn keystore_decrypts_with_the_signer() {
         let password = super::random_password().unwrap();
         let (json, pk) = super::keystore_json(7, &password).unwrap();
-        let sk = sev_signer::keystore::decrypt(&json, &password).unwrap();
+        let sk = dvtee::keystore::decrypt(&json, &password).unwrap();
         assert_eq!(sk.public_key(), pk);
     }
 }

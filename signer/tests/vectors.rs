@@ -9,14 +9,14 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use dvtee::anti_rollback::{Bounds, TrustedClock};
+use dvtee::api::{AppState, router};
+use dvtee::keystore::{self, SecretKey};
+use dvtee::network::Network;
+use dvtee::signing::{self, Policy, PrepareError, SignRequest};
+use dvtee::slashing::SlashingDb;
 use http_body_util::BodyExt;
 use serde::Deserialize;
-use sev_signer::anti_rollback::{Bounds, TrustedClock};
-use sev_signer::api::{AppState, router};
-use sev_signer::keystore::{self, SecretKey};
-use sev_signer::network::Network;
-use sev_signer::signing::{self, Policy, PrepareError, SignRequest};
-use sev_signer::slashing::SlashingDb;
 use tower::ServiceExt;
 
 #[derive(Deserialize)]
@@ -392,7 +392,7 @@ fn app_with_clock(
         network: net,
         policy,
         tls_cert: None,
-        platform: sev_signer::platform::Platform::Tee,
+        platform: dvtee::platform::Platform::Tee,
         pins: None,
         roles: None,
         tokens: None,
@@ -592,7 +592,7 @@ async fn http_api_gloas() {
 /// `knownClients` line grants.
 #[tokio::test]
 async fn client_roles() {
-    use sev_signer::tls::{ClientFingerprint, known_roles};
+    use dvtee::tls::{ClientFingerprint, known_roles};
 
     let v = vectors();
     let tmp = tempfile::tempdir().unwrap();
@@ -623,7 +623,7 @@ async fn client_roles() {
         network: net,
         policy: allow_all(),
         tls_cert: None,
-        platform: sev_signer::platform::Platform::Tee,
+        platform: dvtee::platform::Platform::Tee,
         pins: None,
         roles: Some(roles),
         tokens: None,
@@ -667,7 +667,7 @@ async fn client_roles() {
 /// Basic password, answered with a Basic challenge, and carrying roles.
 #[tokio::test]
 async fn auth_tokens() {
-    use sev_signer::auth::Tokens;
+    use dvtee::auth::Tokens;
 
     let v = vectors();
     let tmp = tempfile::tempdir().unwrap();
@@ -682,7 +682,7 @@ async fn auth_tokens() {
         network: net,
         policy: allow_all(),
         tls_cert: None,
-        platform: sev_signer::platform::Platform::Tee,
+        platform: dvtee::platform::Platform::Tee,
         pins: None,
         roles: None,
         tokens: Some(Tokens::load(&file).unwrap()),

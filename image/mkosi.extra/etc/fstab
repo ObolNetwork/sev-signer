@@ -1,2 +1,2 @@
-# The sealed data disk, opened in the initrd by sev-signer-unlock.service.
-/dev/mapper/sev-signer-data /var/lib/sev-signer ext4 nosuid,nodev,noexec,x-systemd.device-timeout=30s 0 2
+# The sealed data disk, opened in the initrd by dvtee-unlock.service.
+/dev/mapper/dvtee-data /var/lib/dvtee ext4 nosuid,nodev,noexec,x-systemd.device-timeout=30s 0 2

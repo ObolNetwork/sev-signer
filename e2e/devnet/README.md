@@ -1,17 +1,17 @@
-# e2e/devnet: sev-signer behind four validator clients on a Kurtosis devnet
+# e2e/devnet: dvtee behind four validator clients on a Kurtosis devnet
 
 This is a 3-of-4 charon distributed validator on a real local chain, where every operator signs through
-its own sev-signer and runs a different VC. Unlike `e2e/simnet.sh`, which runs against charon's beacon
+its own dvtee and runs a different VC. Unlike `e2e/simnet.sh`, which runs against charon's beacon
 mock, the chain here is real: blocks, attestations and aggregates have to be valid and get included. This
 checks VC wire-format compatibility (for example the v1 `AGGREGATE_AND_PROOF` type that Lighthouse and
-Teku send after Electra), and checks that charon accepts every partial signature sev-signer produces.
+Teku send after Electra), and checks that charon accepts every partial signature dvtee produces.
 
 ```
 Kurtosis enclave: geth + Lighthouse BN, plus a Lighthouse VC with genesis keys 0..55
-relay ─┬─ pod0: charon0 + sev-signer0 + Lighthouse VC  (mTLS)
-       ├─ pod1: charon1 + sev-signer1 + Teku VC        (mTLS)
-       ├─ pod2: charon2 + sev-signer2 + Lodestar VC    (server TLS only)
-       └─ pod3: charon3 + sev-signer3 + Prysm VC       (server TLS only)
+relay ─┬─ pod0: charon0 + dvtee0 + Lighthouse VC  (mTLS)
+       ├─ pod1: charon1 + dvtee1 + Teku VC        (mTLS)
+       ├─ pod2: charon2 + dvtee2 + Lodestar VC    (server TLS only)
+       └─ pod3: charon3 + dvtee3 + Prysm VC       (server TLS only)
 ```
 
 - **Chain:** mainnet preset, 12 s slots, Electra and Fulu at genesis, and 64 genesis validators. Gloas
@@ -19,7 +19,7 @@ relay ─┬─ pod0: charon0 + sev-signer0 + Lighthouse VC  (mTLS)
 - **DV keys:** genesis keys 56–63, derived from the genesis mnemonic and split 3-of-4. No Kurtosis VC
   holds them.
 - **Pods:** each pod's containers share one network namespace, so the VC reaches charon at
-  `127.0.0.1:3600` and sev-signer at `https://127.0.0.1:9000`. Those addresses match the signer's
+  `127.0.0.1:3600` and dvtee at `https://127.0.0.1:9000`. Those addresses match the signer's
   self-signed certificate SANs.
 - **TLS:** Lodestar and Prysm have no client-certificate option, so signers 2 and 3 run without
   `--tls-known-clients`. They trust the signer certificate through `NODE_EXTRA_CA_CERTS` and
@@ -33,7 +33,7 @@ relay ─┬─ pod0: charon0 + sev-signer0 + Lighthouse VC  (mTLS)
 - [Kurtosis CLI](https://docs.kurtosis.com/install) **1.22.2** (tested), with access to GitHub to fetch
   `github.com/ObolNetwork/ethereum-package@6.1.0-obol.6`.
 - charon with `--testnet-capella-hard-fork`. It was tested with main `89e4b00` built from source.
-- sev-signer built with `cargo build --locked --features insecure-dev`.
+- dvtee built with `cargo build --locked --features insecure-dev`.
 - About 4 GB of RAM (measured peak 3.7 GiB, of which 1.1 GiB is Kurtosis's own containers) and about 4 GB
   of images. The images, pulled on first use, are:
   - `sigp/lighthouse:v8.3.3`, `consensys/teku:26.10.3`, `chainsafe/lodestar:v1.50.1`,
@@ -44,7 +44,7 @@ relay ─┬─ pod0: charon0 + sev-signer0 + Lighthouse VC  (mTLS)
 ## Run
 
 ```sh
-CHARON=~/charon/charon SEV_SIGNER=signer/target/debug/sev-signer e2e/devnet/devnet.sh
+CHARON=~/charon/charon DVTEE=signer/target/debug/dvtee e2e/devnet/devnet.sh
 ```
 
 `all` (the default) brings everything up, runs `SLOTS` slots (default 160, 5 epochs), prints a summary,
@@ -60,7 +60,7 @@ To keep the devnet up while you investigate, run the steps one at a time:
 |---|---|---|
 | `KURTOSIS` | `kurtosis` | CLI path |
 | `ETH_PKG` | `github.com/ObolNetwork/ethereum-package@6.1.0-obol.6` | or a local checkout |
-| `ENCLAVE` | `sev-signer-devnet` | enclave name, also the prefix of the harness containers |
+| `ENCLAVE` | `dvtee-devnet` | enclave name, also the prefix of the harness containers |
 | `WORKDIR` | `./devnet-work` | |
 | `SLOTS` | `160` | slots for `wait` |
 | `CHARON_DEBUG_NODES` | none | e.g. `1` to run charon1 at debug level |
@@ -69,13 +69,13 @@ To keep the devnet up while you investigate, run the steps one at a time:
 | `LIGHTHOUSE`, `TEKU`, `LODESTAR`, `PRYSM` | the versions above | DV validator client images |
 | `SIGNER3_REMOTE`, `SIGNER3_CERT`, `SIGNER3_LOG` | none | node3's signer runs elsewhere, e.g. in an SEV-SNP guest; see below |
 
-Each sev-signer reads the devnet's fork schedule from the genesis `config.yaml`. It is started with
+Each dvtee reads the devnet's fork schedule from the genesis `config.yaml`. It is started with
 `--network /genesis/config.yaml --genesis-validators-root <gvr>`. `up` checks that the config's
 `GLOAS_FORK_EPOCH` equals `GLOAS_EPOCH`.
 
 ## A remote signer for node3 (SEV-SNP guest)
 
-With `SIGNER3_REMOTE=<host>:<port>`, pod3 gets no local sev-signer. A `socat` forwarder in the pod
+With `SIGNER3_REMOTE=<host>:<port>`, pod3 gets no local dvtee. A `socat` forwarder in the pod
 listens on `127.0.0.1:9000` and passes the TCP stream to that address, so Prysm is configured as usual
 and TLS still terminates inside the remote signer. `SIGNER3_CERT` is that signer's certificate, taken
 from its attestation evidence; it replaces `signer-data/tls/cert.pem` for Prysm. `SIGNER3_LOG`, if set,
@@ -114,7 +114,7 @@ What to look for after the fork:
 ## What it reports
 
 **`summary`:**
-- **sev-signer, per node:**
+- **dvtee, per node:**
   - signatures by `kind`;
   - `rejected` (400/403, the `rejected sign request` warning);
   - `refused` (412 slashing).

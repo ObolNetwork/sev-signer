@@ -1,6 +1,6 @@
 # Load test
 
-How many signatures per slot one sev-signer completes within the attestation deadline, with the
+How many signatures per slot one dvtee completes within the attestation deadline, with the
 full duty mix of a charon distributed validator running alongside.
 
 ## Summary
@@ -39,7 +39,7 @@ From `signer/`, on the disk the signer's data dir will use:
 scripts/load-test.sh
 ```
 
-It builds `sev-signer` and the load tool, runs the micro benchmarks, the realistic mix at 100, 1000,
+It builds `dvtee` and the load tool, runs the micro benchmarks, the realistic mix at 100, 1000,
 3200 and 6400 keys, and the stress ramp, and writes the tables to `load-test-work/results-<time>/`.
 With the defaults it takes 45 to 60 minutes. The variables at the top of the script change the
 sizes, epochs, slot length, budget and transport.
@@ -48,11 +48,11 @@ Single runs:
 
 ```sh
 cargo build --release --features load-test
-target/release/sev-signer-load micro
-target/release/sev-signer-load run --keys 3200
-target/release/sev-signer-load run --keys 6400 --attesters-per-slot 1600
-target/release/sev-signer-load probe --secs 600   # next to a run: logs sync stalls per second
-target/release/sev-signer-load run --help
+target/release/dvtee-load micro
+target/release/dvtee-load run --keys 3200
+target/release/dvtee-load run --keys 6400 --attesters-per-slot 1600
+target/release/dvtee-load probe --secs 600   # next to a run: logs sync stalls per second
+target/release/dvtee-load run --help
 ```
 
 The tool signs on a devnet of its own: Hoodi's fork schedule (or `--network`'s) under a load-test
@@ -64,12 +64,12 @@ set that signer up on the same devnet:
 
 ```sh
 # from signer/
-target/release/sev-signer-load devnet-config --out load-test-work/devnet
-target/release/sev-signer-load keygen --keys 3200      # load-test-work/keys-3200/
+target/release/dvtee-load devnet-config --out load-test-work/devnet
+target/release/dvtee-load keygen --keys 3200      # load-test-work/keys-3200/
 ../scripts/make-provision-disk.sh -o prov.img -k load-test-work/keys-3200 \
   -c load-test-work/devnet/config.yaml -g "$(cat load-test-work/devnet/genesis-validators-root)" \
   -K knownClients.txt
-target/release/sev-signer-load run --url https://guest:9000 --ca cert.pem \
+target/release/dvtee-load run --url https://guest:9000 --ca cert.pem \
   --client-cert client.pem --client-key client.key --start-epoch 60000
 ```
 
@@ -109,7 +109,7 @@ signer's per-slot mix, at the times charon's scheduler starts each duty:
 * **Latency** is measured from the burst's start, the moment charon would ask, to the response. It
   includes time queued in the client. The budget is 1 s (`--budget-ms`). A run passes if every
   request succeeds, no burst overlaps the next, and p99 of every kind is within the budget.
-* **Production path.** The tool starts the real `sev-signer serve` binary, with TLS and a pinned
+* **Production path.** The tool starts the real `dvtee serve` binary, with TLS and a pinned
   client certificate (mTLS), and drives it over HTTP/1.1 keep-alive connections. Each of the 128
   connections has one request in flight. The slashing database is on the disk under test with
   every fsync. `--plain-http`, `--no-mtls`, `--http2` and `--data-parent /dev/shm` switch these
@@ -172,7 +172,7 @@ At 200 attestations per slot, release:
 | HTTP/2, one connection, ext4 (1 run) | 48.2 | 1112 | 75 |
 | group commit prototype, ext4 (2 runs) | 47.2, 49.0 | 85.6, 102 | 75 |
 
-In-process (`sev-signer-load micro`), through `spawn_blocking` like the handler, median of 3 rounds,
+In-process (`dvtee-load micro`), through `spawn_blocking` like the handler, median of 3 rounds,
 range over 2 to 4 sessions:
 
 | Burst | BLS sign only | Watermark only | Watermark + sign |
@@ -211,7 +211,7 @@ client's connection pool size therefore matters at high rates.
 
 ### Disk stalls
 
-`sev-signer-load probe` ran next to the signer in the second round of 10 runs. Each second it
+`dvtee-load probe` ran next to the signer in the second round of 10 runs. Each second it
 timed ten in-place overwrites with `fdatasync` (A) and ten signer-style watermark writes (B), and
 logged the slowest of each:
 

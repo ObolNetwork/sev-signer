@@ -1,0 +1,15 @@
+#!/bin/bash
+# Starts `dvtee serve` from the settings provisioned onto the sealed
+# disk (see provision and lib.sh). Flags come only from validated files; the
+# environment is cleared so no DVTEE_* variable can reach the signer.
+set -euo pipefail
+
+HERE=$(dirname "$(readlink -f "$0")")
+# shellcheck source-path=SCRIPTDIR source=lib.sh
+. "$HERE/lib.sh"
+
+DVTEE=${DVTEE_BIN:-/usr/bin/dvtee}
+
+[[ -e $DVTEE_DATA/provisioned ]] || { echo "dvtee: not provisioned" >&2; exit 1; }
+dvtee_build_args "$DVTEE_DATA"
+exec env -i PATH=/usr/bin RUST_LOG="$DVTEE_LOG" "$DVTEE" "${DVTEE_ARGS[@]}"

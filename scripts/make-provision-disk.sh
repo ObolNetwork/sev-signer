@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds the TEMPORARY provisioning disk the guest reads once, on first boot
-# (image/mkosi.extra/usr/lib/sev-signer/provision): a plain tar archive used
-# as a raw virtio disk with serial=sev-signer-prov.
+# (image/mkosi.extra/usr/lib/dvtee/provision): a plain tar archive used
+# as a raw virtio disk with serial=dvtee-prov.
 #
 # WARNING: the host can read this disk, keystores and passwords included.
 # Use it for devnet and test keys only.
@@ -66,9 +66,9 @@ fi
 [[ -z $level ]] || printf '%s\n' "$level" >"$stage/config/log-level"
 chmod -R u=rwX,go= "$stage"
 # The same checks the guest runs, so a bad disk fails here rather than at boot.
-# shellcheck source-path=SCRIPTDIR source=../image/mkosi.extra/usr/lib/sev-signer/lib.sh
-. "$(dirname "$0")/../image/mkosi.extra/usr/lib/sev-signer/lib.sh"
-sev_signer_check_config "$stage" || exit 1
+# shellcheck source-path=SCRIPTDIR source=../image/mkosi.extra/usr/lib/dvtee/lib.sh
+. "$(dirname "$0")/../image/mkosi.extra/usr/lib/dvtee/lib.sh"
+dvtee_check_config "$stage" || exit 1
 
 tar --create --format=gnu --owner=0 --group=0 --numeric-owner --mtime=@0 --sort=name \
 	--directory "$stage" --file "$out" validator_keys config

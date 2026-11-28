@@ -1,6 +1,6 @@
-//! Load test for sev-signer. See `docs/load-test.md`.
+//! Load test for dvtee. See `docs/load-test.md`.
 //!
-//! `run` starts the real `sev-signer` binary on generated test keys (or uses
+//! `run` starts the real `dvtee` binary on generated test keys (or uses
 //! `--url`) and drives its HTTP API with one charon DV signer's per-slot duty
 //! mix on a compressed slot clock, then reports latency per kind and whether
 //! every kind stayed under the budget.
@@ -25,14 +25,14 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 use duties::{Kind, Mix, PHASES, Schedule};
-use sev_signer::network::Network;
-use sev_signer::signing::{Policy, SignRequest, SlashingCheck};
-use sev_signer::slashing::SlashingDb;
+use dvtee::network::Network;
+use dvtee::signing::{Policy, SignRequest, SlashingCheck};
+use dvtee::slashing::SlashingDb;
 
 const DST: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
 #[derive(Parser)]
-#[command(about = "Load test for sev-signer (test keys only; see docs/load-test.md)")]
+#[command(about = "Load test for dvtee (test keys only; see docs/load-test.md)")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -123,7 +123,7 @@ struct RunArgs {
     /// take fsync out).
     #[arg(long)]
     data_parent: Option<PathBuf>,
-    /// sev-signer binary. Default: next to this one.
+    /// dvtee binary. Default: next to this one.
     #[arg(long)]
     signer_bin: Option<PathBuf>,
     /// Fork schedule to copy. The signer runs as a devnet with this schedule
@@ -219,9 +219,9 @@ fn network(name: &str) -> anyhow::Result<Network> {
 /// epochs; on a devnet it is off by default, so the release binary is
 /// measured unchanged. The keys and signatures are worthless anywhere else.
 fn load_devnet(base: &Network) -> anyhow::Result<(Network, String)> {
-    let gvr: [u8; 32] = <sha2::Sha256 as sha2::Digest>::digest(b"sev-signer-load devnet").into();
+    let gvr: [u8; 32] = <sha2::Sha256 as sha2::Digest>::digest(b"dvtee-load devnet").into();
     let mut yaml = format!(
-        "PRESET_BASE: mainnet\nCONFIG_NAME: sev-signer-load\nGENESIS_FORK_VERSION: 0x{}\nSLOT_DURATION_MS: {}\n",
+        "PRESET_BASE: mainnet\nCONFIG_NAME: dvtee-load\nGENESIS_FORK_VERSION: 0x{}\nSLOT_DURATION_MS: {}\n",
         hex::encode(base.genesis_fork_version),
         base.slot_duration_ms
     );
@@ -278,7 +278,7 @@ fn signer_bin(a: &RunArgs) -> anyhow::Result<PathBuf> {
         None => std::env::current_exe()?
             .parent()
             .context("exe dir")?
-            .join("sev-signer"),
+            .join("dvtee"),
     };
     anyhow::ensure!(
         bin.exists(),
@@ -304,7 +304,7 @@ async fn start_local(a: &RunArgs, keys: usize, net: &Network, yaml: &str) -> any
         .as_millis();
     let run_dir = a.work_dir.join(format!("run-{stamp}"));
     let data_dir = match &a.data_parent {
-        Some(p) => p.join(format!("sev-signer-load-{stamp}")),
+        Some(p) => p.join(format!("dvtee-load-{stamp}")),
         None => run_dir.join("data"),
     };
     std::fs::create_dir_all(&run_dir)?;
@@ -330,11 +330,11 @@ async fn start_local(a: &RunArgs, keys: usize, net: &Network, yaml: &str) -> any
     if a.plain_http {
         cmd.arg("--insecure-http");
     } else if !a.no_mtls {
-        let ck = rcgen::generate_simple_self_signed(vec!["sev-signer-load".to_string()])?;
+        let ck = rcgen::generate_simple_self_signed(vec!["dvtee-load".to_string()])?;
         let der = ck.cert.der().clone();
         let fp = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&der));
         let known = run_dir.join("knownClients.txt");
-        std::fs::write(&known, format!("sev-signer-load {fp}\n"))?;
+        std::fs::write(&known, format!("dvtee-load {fp}\n"))?;
         cmd.arg("--tls-known-clients").arg(&known);
         client_cert = Some(client::ClientCert {
             cert: der,
@@ -695,7 +695,7 @@ async fn run(a: RunArgs) -> anyhow::Result<()> {
             continue;
         };
         let req: SignRequest = serde_json::from_slice(body)?;
-        let root = sev_signer::signing::prepare(&req, &net, &policy)
+        let root = dvtee::signing::prepare(&req, &net, &policy)
             .map_err(|e| anyhow::anyhow!("{e}"))?
             .signing_root;
         let sig_hex = std::str::from_utf8(resp)?.trim();
@@ -844,7 +844,7 @@ async fn micro(a: MicroArgs) -> anyhow::Result<()> {
             .as_millis()
     ));
     let db = Arc::new(SlashingDb::open(&dir, [1u8; 32])?);
-    let sk = Arc::new(sev_signer::keystore::SecretKey::from_bytes(
+    let sk = Arc::new(dvtee::keystore::SecretKey::from_bytes(
         &blst::min_pk::SecretKey::key_gen(&[7u8; 32], &[])
             .map_err(|e| anyhow::anyhow!("{e:?}"))?
             .to_bytes(),

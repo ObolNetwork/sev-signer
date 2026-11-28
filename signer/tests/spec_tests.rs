@@ -10,14 +10,14 @@
 
 use std::path::{Path, PathBuf};
 
-use serde::de::DeserializeOwned;
-use serde_json::Value;
-use sev_signer::signing::{
+use dvtee::signing::{
     AggregateAndProof, Attestation, AttestationData, AttestationSchema, BeaconBlockHeader,
     ExecutionPayload, ExecutionPayloadEnvelope, ExecutionRequests, PayloadAttestationData,
     ProposerPreferences, Withdrawal,
 };
-use sev_signer::ssz::{self, Root};
+use dvtee::ssz::{self, Root};
+use serde::de::DeserializeOwned;
+use serde_json::Value;
 
 fn spec_dir() -> Option<PathBuf> {
     match std::env::var_os("SPEC_TESTS_DIR") {

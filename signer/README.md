@@ -1,4 +1,4 @@
-# sev-signer
+# dvtee
 
 A Web3Signer-compatible eth2 BLS remote signer, built to run inside a confidential VM. It targets
 AMD SEV-SNP today, and Intel TDX and Arm CCA through Linux configfs-tsm. See `../ROADMAP.md` for
@@ -8,10 +8,10 @@ status and the remaining work.
 
 ```sh
 cargo build --release
-./target/release/sev-signer serve \
+./target/release/dvtee serve \
   --network hoodi \
   --keystores-dir /path/to/.charon/validator_keys \
-  --data-dir /var/lib/sev-signer \
+  --data-dir /var/lib/dvtee \
   --listen 0.0.0.0:9000 \
   --tls-san signer.internal \
   --tls-known-clients knownClients.txt \ # optional mTLS, with roles
@@ -59,7 +59,7 @@ cargo build --release
   The lock hash is bound into attestation evidence (see below). Lock versions v1.7.0 to v1.11.0 are
   supported.
 * **Development without TLS.** `--insecure-http` serves plain HTTP. It disables attestation.
-* **Configuration from the environment.** Every flag also reads a `SEV_SIGNER_*` environment variable
+* **Configuration from the environment.** Every flag also reads a `DVTEE_*` environment variable
   (see `--help`).
 
 ### Networks
@@ -73,7 +73,7 @@ the request.
   Teku's `--network`, a value that is a path (it contains `/` or ends in `.yaml`) is read as a standard
   consensus `config.yaml`, such as a Kurtosis devnet's `network-configs/config.yaml`. The config file
   has no genesis validators root, so it is passed separately (Web3Signer learns it from the first
-  request instead; sev-signer pins it). URLs are not fetched. Use it
+  request instead; dvtee pins it). URLs are not fetched. Use it
   for devnets, and for a public network whose schedule changed after this build. Only flat
   `KEY: value` lines are read. The config is refused if `PRESET_BASE` is not `mainnet`, if the
   schedule is inconsistent, or if it schedules a fork after Gloas.
@@ -126,7 +126,7 @@ Rejected requests (4xx) are logged at `warn` with the reason. Request bodies are
 ## Validator clients
 
 Tested on a Kurtosis devnet (Electra and Fulu at genesis, 32-slot epochs) with each client signing
-through its own sev-signer as one operator of a 3-of-4 charon cluster. The harness is
+through its own dvtee as one operator of a 3-of-4 charon cluster. The harness is
 [`e2e/devnet/`](../e2e/devnet/README.md).
 
 | Client | Version | Works | Pinned server cert | mTLS client cert | Credentials in URL (`https://x:token@…`) |
@@ -148,7 +148,7 @@ partials were accepted on chain.
 ```sh
 NONCE=$(openssl rand -hex 32)
 curl --cacert cert.pem "https://signer:9000/api/v1/tee/attestation?nonce=$NONCE" > evidence.json
-sev-signer verify-evidence --evidence evidence.json --nonce $NONCE \
+dvtee verify-evidence --evidence evidence.json --nonce $NONCE \
   --expected-measurement <hex> --min-tcb <same value as sealing-key --snp-min-tcb> \
   --expected-cluster-lock-hash $(jq -r .lock_hash cluster-lock.json) \
   --vcek vcek.der          # or --fetch-vcek, or neither if the evidence carries it
@@ -195,7 +195,7 @@ They have not been run on a live report from our own guest yet.
 
 ## Sealing key
 
-`sev-signer sealing-key` writes a 32-byte key to stdout, for example to unlock the data disk with
+`dvtee sealing-key` writes a 32-byte key to stdout, for example to unlock the data disk with
 `cryptsetup open --key-file=-`. On SEV-SNP it asks the firmware for a key derived from the chip's
 VCEK, the launch measurement, the guest policy and a pinned minimum TCB
 (`--snp-min-tcb <raw TCB_VERSION hex>`), then derives a per-purpose key from it (`--purpose`,
@@ -213,7 +213,7 @@ client and charon, the disk-unlock flow, and the verifier.
 
 ```sh
 cargo build --features insecure-dev
-./target/debug/sev-signer serve --platform insecure-dev \
+./target/debug/dvtee serve --platform insecure-dev \
   --insecure-dev-root-key ./dev-root.key \
   --network hoodi --keystores-dir … --data-dir ./data
 ```
@@ -238,7 +238,7 @@ cargo build --features insecure-dev
   in. Until then, and after an interchange import, the key has no block root on record, so no
   execution payload envelope is signed for that block.
 * **Import.** Import EIP-3076 history with `--slashing-protection-import file.json` at startup.
-* **Export.** Export it with `sev-signer slashing-export --data-dir … --network …`.
+* **Export.** Export it with `dvtee slashing-export --data-dir … --network …`.
 
 ### Anti-rollback: start floor and horizon
 
@@ -307,5 +307,5 @@ cargo test --features insecure-dev
 
 `scripts/load-test.sh` measures signatures per slot within a latency budget, with a charon DV's full
 duty mix, against the real binary over TLS with an fsynced slashing database. The tool is
-`sev-signer-load` (`--features load-test`, not built by default). Method and results are in
+`dvtee-load` (`--features load-test`, not built by default). Method and results are in
 [`docs/load-test.md`](../docs/load-test.md).

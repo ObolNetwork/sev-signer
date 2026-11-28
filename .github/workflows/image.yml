@@ -62,10 +62,10 @@ jobs:
         with:
           name: image-${{ strategy.job-index }}
           path: |
-            ${{ matrix.path }}/out/image*/sev-signer
-            ${{ matrix.path }}/out/image*/sev-signer.efi
-            ${{ matrix.path }}/out/image*/sev-signer.raw
-            ${{ matrix.path }}/out/image*/sev-signer.roothash
+            ${{ matrix.path }}/out/image*/dvtee
+            ${{ matrix.path }}/out/image*/dvtee.efi
+            ${{ matrix.path }}/out/image*/dvtee.raw
+            ${{ matrix.path }}/out/image*/dvtee.roothash
             ${{ matrix.path }}/out/image*/SHA256SUMS
             ${{ matrix.path }}/out/image*/BUILDINFO
           if-no-files-found: error

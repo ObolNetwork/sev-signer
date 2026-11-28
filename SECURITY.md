@@ -1,6 +1,6 @@
 # Security policy
 
-sev-signer is experimental and unaudited. It has not run on SEV-SNP hardware and must not hold
+DVTEE is experimental and unaudited. It has not run on SEV-SNP hardware and must not hold
 mainnet keys. It is out of scope for the
 [Obol bug bounty](https://docs.obol.org/advanced-and-troubleshooting/security/bug-bounty).
 

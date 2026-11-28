@@ -8,5 +8,5 @@ FailureAction=poweroff-force
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/echo "sev-signer: boot failed, powering off (no emergency shell in this image)"
+ExecStart=/usr/bin/echo "dvtee: boot failed, powering off (no emergency shell in this image)"
 StandardOutput=journal+console

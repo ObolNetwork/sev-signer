@@ -10,3 +10,4 @@ image/mkosi.tools/
 image/mkosi.tools.manifest
 image/mkosi.cache/
 load-test-work/
+__pycache__/

@@ -460,6 +460,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "dvtee"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "anyhow",
+ "axum",
+ "axum-server",
+ "base64",
+ "blst",
+ "clap",
+ "ctr",
+ "hex",
+ "hmac",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "libc",
+ "pbkdf2",
+ "rcgen",
+ "ring",
+ "rustls",
+ "rustls-native-certs",
+ "scrypt",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-normalization",
+ "x509-cert",
+ "zeroize",
+]
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1249,46 +1289,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "sev-signer"
-version = "0.1.0"
-dependencies = [
- "aes",
- "anyhow",
- "axum",
- "axum-server",
- "base64",
- "blst",
- "clap",
- "ctr",
- "hex",
- "hmac",
- "http-body-util",
- "hyper",
- "hyper-util",
- "libc",
- "pbkdf2",
- "rcgen",
- "ring",
- "rustls",
- "rustls-native-certs",
- "scrypt",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-rustls",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "unicode-normalization",
- "x509-cert",
- "zeroize",
 ]
 
 [[package]]

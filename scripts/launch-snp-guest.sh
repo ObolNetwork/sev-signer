@@ -1,19 +1,19 @@
 #!/bin/bash
-# Launches the sev-signer guest under QEMU/KVM as an SEV-SNP guest, with the
+# Launches the dvtee guest under QEMU/KVM as an SEV-SNP guest, with the
 # parameters in snp-params.env (the same ones expected-measurement.sh uses).
 #
 #   scripts/launch-snp-guest.sh --data data.img [--provision prov.img]
-#       [--uki out/image/sev-signer.efi] [--image out/image/sev-signer.raw]
+#       [--uki out/image/dvtee.efi] [--image out/image/dvtee.raw]
 #       [--ovmf out/ovmf/OVMF.fd]
 #       [--signer-addr 127.0.0.1:19000] [--public-addr 127.0.0.1:19001]
 #       [--serial-log FILE] [--qmp SOCKET] [--append CMDLINE] [--print]
 #
 #   --uki/--image the UKI and the root disk image from the same build (the
 #                 UKI's verity root hash must match the image)
-#   --data        raw data disk (serial sev-signer-data). For a new guest,
+#   --data        raw data disk (serial dvtee-data). For a new guest,
 #                 create a blank one: truncate -s 1G data.img
 #   --provision   provisioning disk from make-provision-disk.sh, read-only
-#                 (serial sev-signer-prov). Only read on the first boot.
+#                 (serial dvtee-prov). Only read on the first boot.
 #   --signer-addr host address forwarded to the guest's signing port 9000
 #   --public-addr host address forwarded to the public port 9001
 #                 (health and attestation)
@@ -36,8 +36,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/scripts/snp-params.env"
 
 QEMU=${QEMU:-qemu-system-x86_64}
-UKI=$ROOT/out/image/sev-signer.efi
-IMAGE=$ROOT/out/image/sev-signer.raw
+UKI=$ROOT/out/image/dvtee.efi
+IMAGE=$ROOT/out/image/dvtee.raw
 OVMF=$ROOT/out/ovmf/OVMF.fd
 DATA=''
 PROV=''
@@ -73,7 +73,7 @@ VIRTIO=disable-legacy=on,iommu_platform=true
 # shellcheck disable=SC2054 # commas are QEMU option syntax
 cmd=(
 	"$QEMU"
-	-name sev-signer,debug-threads=on
+	-name dvtee,debug-threads=on
 	-enable-kvm
 	-nodefaults -display none -vga none -no-reboot
 	-machine "q35,confidential-guest-support=sev0,memory-backend=ram0,vmport=off"
@@ -90,14 +90,14 @@ cmd+=(
 	-netdev "user,id=net0,ipv6=off,hostfwd=tcp:$SIGNER_ADDR-:9000,hostfwd=tcp:$PUBLIC_ADDR-:9001"
 	-device "virtio-net-pci,netdev=net0,$VIRTIO,romfile="
 	-drive "if=none,id=root,file=$IMAGE,format=raw,readonly=on"
-	-device "virtio-blk-pci,drive=root,serial=sev-signer-root,$VIRTIO"
+	-device "virtio-blk-pci,drive=root,serial=dvtee-root,$VIRTIO"
 	-drive "if=none,id=data,file=$DATA,format=raw"
-	-device "virtio-blk-pci,drive=data,serial=sev-signer-data,$VIRTIO"
+	-device "virtio-blk-pci,drive=data,serial=dvtee-data,$VIRTIO"
 )
 if [[ -n $PROV ]]; then
 	cmd+=(
 		-drive "if=none,id=prov,file=$PROV,format=raw,readonly=on"
-		-device "virtio-blk-pci,drive=prov,serial=sev-signer-prov,$VIRTIO"
+		-device "virtio-blk-pci,drive=prov,serial=dvtee-prov,$VIRTIO"
 	)
 fi
 [[ -z $QMP ]] || cmd+=(-qmp "unix:$QMP,server=on,wait=off")

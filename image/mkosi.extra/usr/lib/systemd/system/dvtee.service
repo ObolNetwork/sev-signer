@@ -3,17 +3,17 @@
 # configfs-tsm report entries are root-owned, but with no capabilities and a
 # read-only view of everything except its data dir and the TSM report dir.
 [Unit]
-Description=sev-signer (Web3Signer-compatible eth2 BLS signer)
-Requires=sev-signer-provision.service
-After=sev-signer-provision.service network.target sys-kernel-config.mount systemd-modules-load.service
-RequiresMountsFor=/var/lib/sev-signer
+Description=dvtee (Web3Signer-compatible eth2 BLS signer)
+Requires=dvtee-provision.service
+After=dvtee-provision.service network.target sys-kernel-config.mount systemd-modules-load.service
+RequiresMountsFor=/var/lib/dvtee
 StartLimitIntervalSec=10min
 StartLimitBurst=5
 FailureAction=poweroff-force
 
 [Service]
 Type=exec
-ExecStart=/usr/lib/sev-signer/start
+ExecStart=/usr/lib/dvtee/start
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=15s
@@ -26,7 +26,7 @@ AmbientCapabilities=
 NoNewPrivileges=yes
 ProtectSystem=strict
 # No "-": if configfs-tsm is missing, fail loudly rather than serve without attestation.
-ReadWritePaths=/var/lib/sev-signer /sys/kernel/config/tsm/report
+ReadWritePaths=/var/lib/dvtee /sys/kernel/config/tsm/report
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes

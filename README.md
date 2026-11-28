@@ -19,7 +19,7 @@ machine can't look inside. The host can't read the share, can't copy it, and can
 slashable or off-policy signature. The other operators can check which code is holding the share before they
 trust it.
 
-The piece that does this is **`sev-signer`**. It's a small Rust BLS signer, built to run in an AMD SEV-SNP
+The piece that does this is **`dvtee`**. It's a small Rust BLS signer, built to run in an AMD SEV-SNP
 guest, behind the standard [Web3Signer](https://docs.web3signer.consensys.io/) API. Charon and your validator
 client don't change: you point the VC at a different URL.
 
@@ -32,7 +32,7 @@ flowchart LR
       c0[charon] --- vc0[validator client]
       vc0 -- "Web3Signer API · mTLS" --> g0
       subgraph g0["SEV-SNP guest · measured · sealed disk"]
-        s0["sev-signer<br/>key share 0<br/>slashing DB"]
+        s0["dvtee<br/>key share 0<br/>slashing DB"]
       end
     end
     op1["Operator 1<br/>charon · VC · share 1"]
@@ -60,7 +60,7 @@ flowchart LR
 | A compromised operator machine holds a readable key share. | The share lives only inside the guest, on a disk sealed to the chip and the measured image. The host sees ciphertext. |
 | Slashing protection is a file the host can edit, delete or roll back. | Watermarks are kept inside the guest and written before every signature. A **start floor** from a Roughtime quorum refuses to sign for the past after a restart, so a rolled-back disk can't double-sign. |
 | A compromised VC or charon can ask the signer for any signature. | Every signing root is recomputed from the typed request. Fee recipients are pinned to the cluster lock. Exits need a separate role. Gloas builder bids are refused outright. |
-| You trust that a peer runs what it says it runs. | `GET /api/v1/tee/attestation` returns a hardware report binding the code measurement, the TLS key, the BLS shares and the cluster lock hash. `sev-signer verify-evidence` checks it offline, AMD chain included. |
+| You trust that a peer runs what it says it runs. | `GET /api/v1/tee/attestation` returns a hardware report binding the code measurement, the TLS key, the BLS shares and the cluster lock hash. `dvtee verify-evidence` checks it offline, AMD chain included. |
 | A lost box is a lost share. | Still a lost share, by design. Nothing exports keys. The cluster replaces or recovers the operator, as it would without a TEE ([docs/cluster-edits.md](docs/cluster-edits.md)). |
 
 Each guest is one share, not the whole validator. A broken TEE, or a bug in one chip vendor's firmware, costs
@@ -102,7 +102,7 @@ a 3-of-4 charon cluster ([`e2e/devnet/`](e2e/devnet/README.md)).
 cd signer
 cargo build --release --features insecure-dev
 
-./target/release/sev-signer serve \
+./target/release/dvtee serve \
   --platform insecure-dev \
   --network hoodi \
   --keystores-dir /path/to/.charon/validator_keys \
@@ -120,7 +120,7 @@ cargo build --release --features insecure-dev
 ```sh
 NONCE=$(openssl rand -hex 32)
 curl --cacert data/tls/cert.pem "https://127.0.0.1:9000/api/v1/tee/attestation?nonce=$NONCE" > evidence.json
-./target/release/sev-signer verify-evidence --evidence evidence.json --nonce $NONCE \
+./target/release/dvtee verify-evidence --evidence evidence.json --nonce $NONCE \
   --expected-cluster-lock-hash <hex> --allow-insecure-dev
 ```
 
@@ -145,7 +145,7 @@ See [`signer/README.md`](signer/README.md) for every option, the API, mTLS and t
 
 | Path | What it is |
 |------|------------|
-| [`signer/`](signer/) | `sev-signer`, the signing service |
+| [`signer/`](signer/) | `dvtee`, the signing service |
 | [`image/`](image/), [`ovmf/`](ovmf/), [`scripts/`](scripts/) | The reproducible guest image, firmware, measurement and launch tooling |
 | [`e2e/`](e2e/) | Devnet and simnet harnesses with charon and real validator clients |
 | [`docs/`](docs/) | [Threat model](docs/threat-model.md), [cluster edits](docs/cluster-edits.md), [load test](docs/load-test.md), [hardware runbook](docs/hardware-runbook.md) |

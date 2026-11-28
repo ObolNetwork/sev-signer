@@ -1,6 +1,6 @@
 # Cluster edits with TEE signers
 
-How a charon cluster whose key shares live in sev-signer guests recovers a lost signer, moves a signer
+How a charon cluster whose key shares live in dvtee guests recovers a lost signer, moves a signer
 to a new image, and changes its operator set, without any share leaving a TEE in plaintext.
 
 Status: design. Nothing here is implemented yet. It is written against charon's existing edit
@@ -86,7 +86,7 @@ order = {
 polynomial, the public shares, the validator keys and the lock are unchanged. Use it for:
 
 - a dead guest or machine, or one that moved to another chip and can no longer unseal its disk;
-- **moving a signer to a new image**, e.g. a sev-signer release for a new fork. A new image has a new
+- **moving a signer to a new image**, e.g. a dvtee release for a new fork. A new image has a new
   measurement and so a new sealing key; it cannot open the old disk, and the old guest exports nothing;
 - a lost disk on a non-TEE node (charon can run the same protocol with keystores).
 
@@ -172,7 +172,7 @@ the same validator keys and produce a new lock. With guests:
   in reply to a complaint signed with an order participant's ceremony key, only the piece for that
   participant's index, and aborts if more than `n' - t'` participants complain. A rooted host can then
   only make its own index's pieces public, which it was about to receive anyway.
-- **Watermarks carry over locally.** sev-signer stores watermarks per share pubkey today, so new shares
+- **Watermarks carry over locally.** dvtee stores watermarks per share pubkey today, so new shares
   would start empty. The guest copies each validator's watermark from the old share to the new share as
   part of the combine step. Newly added operators start from the start floor. Charon should also refuse
   duties for 2 epochs after it loads a new lock.
@@ -235,7 +235,7 @@ one takes effect at once.
 
 ## Requirements for `charon edit recover`
 
-Recover is the planned path for both a dead machine and an image upgrade, such as a new sev-signer
+Recover is the planned path for both a dead machine and an image upgrade, such as a new dvtee
 release for a hard fork. The signer side is small. Most of the work is in charon and the specs. This
 list collects what each side needs, for whoever designs and builds it.
 
@@ -260,7 +260,7 @@ list collects what each side needs, for whoever designs and builds it.
   with all new guests as targets), keeping the cluster at threshold. With `n - t = 1` (3 of 4), only
   one guest may be down at a time.
 
-**sev-signer (guest)**
+**dvtee (guest)**
 - A ceremony API on its own listener, behind its own client role (`ceremony`), for charon only.
 - Check the order: `t` distinct operator signatures against the pinned lock, own index, fresh `run_id`,
   `not_after`, and the delay for a new measurement on trusted time.

@@ -1,4 +1,4 @@
-enable sev-signer.service
+enable dvtee.service
 enable systemd-networkd.service
 # DNS for the Roughtime servers that give the start floor its trusted time.
 enable systemd-resolved.service

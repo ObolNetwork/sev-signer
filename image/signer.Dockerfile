@@ -1,4 +1,4 @@
-# Builds the sev-signer binary for the guest image (image/build.sh).
+# Builds the dvtee binary for the guest image (image/build.sh).
 #
 # glibc, statically linked, so one binary runs in the initrd, in the root and
 # on the host (for verify-evidence). Every input is pinned: the toolchain
@@ -14,5 +14,5 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY certs ./certs
 RUN cargo build --release --locked --target x86_64-unknown-linux-gnu \
- && cp target/x86_64-unknown-linux-gnu/release/sev-signer /sev-signer \
- && ldd /sev-signer 2>&1 | grep -qE 'statically linked|not a dynamic executable'
+ && cp target/x86_64-unknown-linux-gnu/release/dvtee /dvtee \
+ && ldd /dvtee 2>&1 | grep -qE 'statically linked|not a dynamic executable'

@@ -22,7 +22,7 @@ use hyper::body::Bytes;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use sev_signer::network::{FAR_FUTURE_EPOCH, Network, SLOTS_PER_EPOCH};
+use dvtee::network::{FAR_FUTURE_EPOCH, Network, SLOTS_PER_EPOCH};
 
 /// The three times in a slot at which duties start, as in charon's
 /// scheduler: slot start, 1/3 and 2/3.
@@ -373,7 +373,7 @@ pub fn sign_paths(pubkeys: &[String]) -> Arc<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sev_signer::signing::{Policy, SignRequest, prepare};
+    use dvtee::signing::{Policy, SignRequest, prepare};
 
     fn hoodi() -> Network {
         Network::presets()
@@ -406,13 +406,11 @@ mod tests {
                         .unwrap_or_else(|e| panic!("{}: {e}", r.kind.name()));
                     assert_eq!(p.kind, r.kind.name());
                     match p.slashing {
-                        Some(sev_signer::signing::SlashingCheck::Attestation {
-                            target, ..
-                        }) => {
+                        Some(dvtee::signing::SlashingCheck::Attestation { target, .. }) => {
                             let prev = last_target.insert(r.key, target);
                             assert!(prev.is_none_or(|t| t < target), "target reused");
                         }
-                        Some(sev_signer::signing::SlashingCheck::Block { slot, .. }) => {
+                        Some(dvtee::signing::SlashingCheck::Block { slot, .. }) => {
                             let prev = last_block.insert(r.key, slot);
                             assert!(prev.is_none_or(|t| t < slot), "block slot reused");
                         }

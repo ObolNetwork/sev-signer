@@ -1,4 +1,4 @@
-# Hardware runbook: the sev-signer guest on a bare-metal SEV-SNP host
+# Hardware runbook: the dvtee guest on a bare-metal SEV-SNP host
 
 This is the first run of the mkosi guest image (`image/`) on real AMD SEV-SNP hardware. The aim is to
 run it as written, without development on the box. If something in the image has to change, record
@@ -25,9 +25,9 @@ slashing watermark before it releases a signature, and section 5.2 tests exactly
 **Variables used below:**
 
 ```sh
-R=~/sev-signer                 # this repo, at the commit under test
+R=~/dvtee                 # this repo, at the commit under test
 RUN=~/snp-run                  # scratch dir for disks, logs and evidence
-S=$R/out/image/sev-signer      # static sev-signer from the image build (runs on the host too)
+S=$R/out/image/dvtee      # static dvtee from the image build (runs on the host too)
 ```
 
 ## 1. Host
@@ -112,9 +112,9 @@ make image-test                              # boot-script unit tests: expect "0
   platform's TCB (section 3).
 
 ```sh
-SNP_MIN_TCB=0x0000000000000000 make image     # out/image/: sev-signer.efi, .raw, SHA256SUMS, BUILDINFO
+SNP_MIN_TCB=0x0000000000000000 make image     # out/image/: dvtee.efi, .raw, SHA256SUMS, BUILDINFO
 mkdir -p $RUN/image-discovery                 # section 4 overwrites out/image
-cp out/image/{sev-signer,sev-signer.efi,sev-signer.raw,sev-signer.roothash,SHA256SUMS,BUILDINFO} $RUN/image-discovery/
+cp out/image/{dvtee,dvtee.efi,dvtee.raw,dvtee.roothash,SHA256SUMS,BUILDINFO} $RUN/image-discovery/
 cp out/image/SHA256SUMS $RUN/SHA256SUMS.discovery
 ```
 
@@ -131,7 +131,7 @@ Expected measurement:
 
 ```sh
 make ovmf-image                                # the pinned sev-snp-measure lives in this image
-scripts/expected-measurement.sh --uki $RUN/image-discovery/sev-signer.efi --json > $RUN/expected-discovery.json
+scripts/expected-measurement.sh --uki $RUN/image-discovery/dvtee.efi --json > $RUN/expected-discovery.json
 cat $RUN/expected-discovery.json               # .measurement is M_DISC
 ```
 
@@ -141,8 +141,8 @@ cat $RUN/expected-discovery.json               # .measurement is M_DISC
 mkdir -p $RUN/disc && cd $RUN/disc
 $R/scripts/make-provision-disk.sh -o prov.img -k $R/signer/tests/vectors/keystores -n hoodi -l debug
 truncate -s 1G data.img
-$R/scripts/launch-snp-guest.sh --uki $RUN/image-discovery/sev-signer.efi \
-    --image $RUN/image-discovery/sev-signer.raw --data data.img --provision prov.img \
+$R/scripts/launch-snp-guest.sh --uki $RUN/image-discovery/dvtee.efi \
+    --image $RUN/image-discovery/dvtee.raw --data data.img --provision prov.img \
     --serial-log serial.log --qmp qmp.sock &
 tail -f serial.log
 ```
@@ -150,11 +150,11 @@ tail -f serial.log
 Expected on the serial console, in order:
 
 1. The kernel reports SEV-SNP active (`Memory Encryption Features active: AMD SEV SEV-ES SEV-SNP`).
-2. `sev-signer-unlock: data disk ..., minimum TCB 0x0000000000000000`
-3. `sev-signer-unlock: first boot: creating the sealed data disk`, then `created and opened`. The
+2. `dvtee-unlock: data disk ..., minimum TCB 0x0000000000000000`
+3. `dvtee-unlock: first boot: creating the sealed data disk`, then `created and opened`. The
    integrity wipe of 1 GB takes a while.
-4. `sev-signer-provision: provisioned 2 keystore(s) ...`
-5. sev-signer's `sev-signer serving` line.
+4. `dvtee-provision: provisioned 2 keystore(s) ...`
+5. dvtee's `dvtee serving` line.
 
 If the guest powers off instead, the last lines say why. See Troubleshooting.
 
@@ -228,7 +228,7 @@ truncate -s 1G data.img
 $R/scripts/launch-snp-guest.sh --data data.img --provision prov.img --serial-log serial-1.log --qmp qmp.sock &
 ```
 
-When `sev-signer serving` appears:
+When `dvtee serving` appears:
 
 1. Repeat the attestation block from section 3 with `$M`, adding `--min-tcb $MIN_TCB`.
 2. Then sign. The guest runs on Hoodi with the start floor on, so the test vector's old epoch is
@@ -237,7 +237,7 @@ When `sev-signer serving` appears:
 
 ```sh
 (cd $R/signer && cargo build --locked --features insecure-dev)
-$R/signer/target/debug/sev-signer serve --platform insecure-dev --insecure-dev-root-key $RUN/ref.key \
+$R/signer/target/debug/dvtee serve --platform insecure-dev --insecure-dev-root-key $RUN/ref.key \
   --network hoodi --anti-rollback false --keystores-dir $R/signer/tests/vectors/keystores \
   --data-dir $RUN/ref --listen 127.0.0.1:29200 > $RUN/ref.log 2>&1 &
 export SIGN_CHECK_LIVE=1 SIGN_CHECK_REF="https://127.0.0.1:29200 $RUN/ref/tls/cert.pem" SIGN_CHECK_STATE=$RUN/live.json
@@ -269,9 +269,9 @@ $R/scripts/launch-snp-guest.sh --data data.img --provision prov.img --serial-log
 ```
 
 * **Expected serial output:**
-  * `sev-signer-unlock: opened`, not `created`;
-  * no `sev-signer-provision` line;
-  * `sev-signer serving`.
+  * `dvtee-unlock: opened`, not `created`;
+  * no `dvtee-provision` line;
+  * `dvtee serving`.
 * **Then:**
   * fetch evidence again; the TLS cert's sha256 must equal `cert.sha256`, because the TLS key lives on
     the sealed disk;
@@ -284,7 +284,7 @@ $R/scripts/launch-snp-guest.sh --data data.img --provision prov.img --serial-log
 **5.2 Power cut.** Right after a signing request, kill QEMU. To the guest, that is a power cut.
 
 ```sh
-$R/scripts/sign-check.sh https://127.0.0.1:19000 cert.pem first; pkill -9 -f 'qemu-system-x86_64 -name sev-signer'
+$R/scripts/sign-check.sh https://127.0.0.1:19000 cert.pem first; pkill -9 -f 'qemu-system-x86_64 -name dvtee'
 $R/scripts/launch-snp-guest.sh --data data.img --serial-log serial-3.log --qmp qmp.sock &
 ```
 
@@ -306,7 +306,7 @@ cd $RUN/rel; sha256sum data.img > data.sha256
 ```
 
 * **Expected for every test:**
-  * the serial log shows a `sev-signer-unlock: FAILED` line (normally `cannot open the data disk`);
+  * the serial log shows a `dvtee-unlock: FAILED` line (normally `cannot open the data disk`);
   * the guest powers off on its own and QEMU exits;
   * `sha256sum -c data.sha256` still passes, so a failed open writes nothing.
 * **For each test, record:**
@@ -316,11 +316,11 @@ cd $RUN/rel; sha256sum data.img > data.sha256
 
 | # | Change | How | Measurement |
 |---|---|---|---|
-| c1 | host command line | `--append "$(objcopy -O binary --only-section=.cmdline $R/out/image/sev-signer.efi /dev/stdout \| tr -d '\0') sev_signer.host=1"` | differs: `scripts/expected-measurement.sh --append "<same string>"` |
-| c2 | image | `SNP_MIN_TCB=$MIN_TCB image/build.sh --profile variant`, then `--uki $R/out/image-variant/sev-signer.efi --image $R/out/image-variant/sev-signer.raw` | differs: `expected-measurement.sh --uki $R/out/image-variant/sev-signer.efi` |
+| c1 | host command line | `--append "$(objcopy -O binary --only-section=.cmdline $R/out/image/dvtee.efi /dev/stdout \| tr -d '\0') dvtee.host=1"` | differs: `scripts/expected-measurement.sh --append "<same string>"` |
+| c2 | image | `SNP_MIN_TCB=$MIN_TCB image/build.sh --profile variant`, then `--uki $R/out/image-variant/dvtee.efi --image $R/out/image-variant/dvtee.raw` | differs: `expected-measurement.sh --uki $R/out/image-variant/dvtee.efi` |
 | c3 | vCPU count | `SNP_VCPUS=2 $R/scripts/launch-snp-guest.sh ...` | differs: `SNP_VCPUS=2 expected-measurement.sh` |
 | c4 | guest policy | `SNP_POLICY=0x30001 $R/scripts/launch-snp-guest.sh ...` (ABI minor 1: same rules, different policy value) | **same** as `$M`; only the key differs |
-| c5 | discovery image | `--uki $RUN/image-discovery/sev-signer.efi --image $RUN/image-discovery/sev-signer.raw` (min TCB 0) | `M_DISC` |
+| c5 | discovery image | `--uki $RUN/image-discovery/dvtee.efi --image $RUN/image-discovery/dvtee.raw` (min TCB 0) | `M_DISC` |
 
 * **c1 detail.** Without Secure Boot, systemd-stub uses a host `-append` instead of the UKI's own
   command line. The measurement is what catches it. Say whether the guest booted as far as the unlock.
@@ -354,12 +354,12 @@ through the SNP guest.
   forwarded port. TLS still ends inside the guest.
 * **The certificate** Prysm trusts is the one from the guest's attestation evidence.
 * **Requirements:** see `e2e/devnet/README.md`. That means Kurtosis CLI 1.22.2, charon main from
-  `e995d274` or later, and a host `sev-signer` built with `--features insecure-dev`. Release and
+  `e995d274` or later, and a host `dvtee` built with `--features insecure-dev`. Release and
   insecure-dev builds both come from the same commit.
 
 ```sh
 cd $R
-export CHARON=~/charon/charon SEV_SIGNER=$R/signer/target/debug/sev-signer WORKDIR=$RUN/devnet-work
+export CHARON=~/charon/charon DVTEE=$R/signer/target/debug/dvtee WORKDIR=$RUN/devnet-work
 (cd signer && cargo build --locked --features insecure-dev)
 e2e/devnet/devnet.sh up && e2e/devnet/devnet.sh keys && e2e/devnet/devnet.sh cluster
 . $WORKDIR/env                                   # GVR
@@ -378,7 +378,7 @@ $R/scripts/launch-snp-guest.sh --data data.img --provision prov.img \
 * **Firewall.** Containers on the Kurtosis network reach it through the host's INPUT chain. If a host
   firewall drops that traffic, allow TCP 19000 from the Docker bridges, and record it.
 
-When the guest logs `sev-signer serving`:
+When the guest logs `dvtee serving`:
 
 1. Run the attestation block from section 3, with `$M` from section 4 (same build).
 2. Check that `pubkeys` in the evidence are node3's key shares: `jq .pubkeys evidence.json`.
@@ -405,7 +405,7 @@ e2e/devnet/devnet.sh checks  | tee $RUN/dev/checks.txt
 
 ## 8. Results
 
-Write `results/<NNN>-sev-signer-snp-hardware.md`, with raw files in a directory of the same name.
+Write `results/<NNN>-dvtee-snp-hardware.md`, with raw files in a directory of the same name.
 Put commands' raw output in the raw directory, not just conclusions.
 
 **Host and build:**
@@ -447,7 +447,7 @@ verbose systemd and udev logs; it has its own measurement.
 | Symptom | Likely cause |
 |---|---|
 | mkosi: `userns_acquire_empty`, `OSError: [Errno -28]` or `unshare failed: No space left on device` | the host blocks user namespaces (`user.max_user_namespaces=0`, as Obol's host hardening sets on purpose). Don't relax it: build in CI (`.github/workflows/image.yml`, run on a branch or by `workflow_dispatch` with `snp_min_tcb`) and copy the artifacts to the host. The builds are reproducible, so `SHA256SUMS` from CI is what you'd have built |
-| boot reaches `multi-user.target` but sev-signer never starts; the serial log shows the data disk's fsck, then nothing | the root image lacks `dmsetup`'s udev rules, so systemd marks the initrd's dm devices not ready after switch-root and stops the data disk's mount. Fixed in `mkosi.conf`; to see it, boot with `--append "<the image's command line> systemd.log_level=debug systemd.log_target=console"` and look for `var-lib-sev\x2dsigner.mount/stop` |
+| boot reaches `multi-user.target` but dvtee never starts; the serial log shows the data disk's fsck, then nothing | the root image lacks `dmsetup`'s udev rules, so systemd marks the initrd's dm devices not ready after switch-root and stops the data disk's mount. Fixed in `mkosi.conf`; to see it, boot with `--append "<the image's command line> systemd.log_level=debug systemd.log_target=console"` and look for `var-lib-sev\x2dsigner.mount/stop` |
 | `systemd-resolved.service`: `/var/tmp: No such file or directory`, `226/NAMESPACE` | resolved started before the `/var` tmpfs; fixed by the drop-in in `mkosi.extra/usr/lib/systemd/system/systemd-resolved.service.d/` |
 | mkosi stops on a missing ESP or bootloader | `mkosi.repart/` deliberately has no ESP (the UKI is booted with `-kernel`). Add `00-esp.conf` with `Type=esp`, `Format=vfat`, `CopyFiles=/efi:/` and `CopyFiles=/boot:/`. The guest never reads it, and the measurement doesn't change. Record the error |
 | mkosi: a package is missing from the snapshot | record the name; the tools tree uses only the base profile (`ToolsTreeProfiles=`) |
@@ -455,14 +455,14 @@ verbose systemd and udev logs; it has its own measurement.
 | QEMU complains about `cbitpos` | set `SNP_CBITPOS` to the host's value (CPUID 0x8000001F EBX[5:0]); it doesn't change the measurement |
 | no serial output at all | `-bios` isn't the AmdSevX64 build from `make ovmf`, or OVMF refused the UKI (kernel-hashes mismatch) |
 | measurement mismatch | check, in order: the OVMF and UKI hashes in the expected JSON, no `-append`, `SNP_VCPUS` and `SNP_VCPU_TYPE`. Then try `SNP_GUEST_FEATURES=0x21 scripts/expected-measurement.sh` (KVM may have added DebugSwap); record which value matched and the QEMU and kernel versions |
-| initrd stops before unlock, or `/sysroot` never mounts | verity: `--image` isn't the `sev-signer.raw` from the same build as `--uki` |
+| initrd stops before unlock, or `/sysroot` never mounts | verity: `--image` isn't the `dvtee.raw` from the same build as `--uki` |
 | `sealing-key failed`, `firmware status 0x16` | `SNP_MIN_TCB` is above the platform's committed TCB |
 | `sealing-key failed`, cannot open `/dev/sev-guest` | the `sev-guest` module didn't load; record the dmesg lines |
 | `luksFormat failed` | AEAD cipher missing from the initrd (aegis128 modules); record the message |
 | `the mapping is not aegis128-random with AEAD integrity` | the `cryptsetup status` output format differs from the script's check; it is printed just above |
 | `cannot open the data disk` on a normal boot | measurement, policy, chip or minimum TCB differ from the boot that created the disk |
-| `sev-signer serving` but attestation returns 500 | configfs-tsm: the sev-guest TSM provider, or the unit's read-only `/sys` view (`ReadWritePaths=` for `/sys/kernel/config/tsm/report`); record the signer's error line |
-| sev-signer.service fails with `NAMESPACE` / `226` | `/sys/kernel/config/tsm/report` doesn't exist: the `tsm` or `sev-guest` module isn't loaded, or configfs isn't mounted |
+| `dvtee serving` but attestation returns 500 | configfs-tsm: the sev-guest TSM provider, or the unit's read-only `/sys` view (`ReadWritePaths=` for `/sys/kernel/config/tsm/report`); record the signer's error line |
+| dvtee.service fails with `NAMESPACE` / `226` | `/sys/kernel/config/tsm/report` doesn't exist: the `tsm` or `sev-guest` module isn't loaded, or configfs isn't mounted |
 | blocks and attestations get 503, `no trusted time` in the serial log | the guest can't reach a Roughtime quorum: no outbound UDP from the guest, or no DNS (`systemd-resolved` and the DHCP-provided resolver); record which servers answered |
-| guest powers off after `sev-signer-provision` | the provisioning archive was rejected; the reason is in the line before |
+| guest powers off after `dvtee-provision` | the provisioning archive was rejected; the reason is in the line before |
 

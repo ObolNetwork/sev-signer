@@ -2,7 +2,7 @@
 # Fails closed: on any error the guest powers off. It never falls back to
 # another key and never drops to a shell.
 [Unit]
-Description=Unlock the sealed sev-signer data disk
+Description=Unlock the sealed dvtee data disk
 DefaultDependencies=no
 After=systemd-modules-load.service systemd-udev-trigger.service
 Wants=systemd-udev-trigger.service
@@ -13,7 +13,7 @@ FailureAction=poweroff-force
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/lib/sev-signer/unlock
+ExecStart=/usr/lib/dvtee/unlock
 StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=10min

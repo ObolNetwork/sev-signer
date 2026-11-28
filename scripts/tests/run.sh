@@ -3,7 +3,7 @@
 # local signer on the insecure-dev platform (no TEE needed):
 #
 #   (cd signer && cargo build --locked --features insecure-dev)
-#   scripts/tests/run.sh signer/target/debug/sev-signer
+#   scripts/tests/run.sh signer/target/debug/dvtee
 #
 # Covers launch/measure command lines (--print/--dry-run), sign-check.sh
 # (first/conflict/replay, and slashing protection across a restart),
@@ -11,7 +11,7 @@
 set -uo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-BIN=$(realpath "${1:?path to sev-signer built with --features insecure-dev}")
+BIN=$(realpath "${1:?path to dvtee built with --features insecure-dev}")
 T=$(mktemp -d)
 pid=''
 cleanup() { [[ -z $pid ]] || kill "$pid" 2>/dev/null; rm -rf "$T"; }
@@ -24,8 +24,8 @@ fails() { ! "$@"; }
 cmd=$("$ROOT/scripts/launch-snp-guest.sh" --data "$T/d.img" --provision "$T/p.img" --print)
 check "launch: kernel-hashes and policy" grep -q 'sev-snp-guest\\,id=sev0\\,cbitpos=51\\,reduced-phys-bits=1\\,policy=0x30000\\,kernel-hashes=on' <<<"$cmd"
 check "launch: no -append by default" fails grep -q -- '-append' <<<"$cmd"
-check "launch: data disk serial" grep -q 'serial=sev-signer-data' <<<"$cmd"
-check "launch: root image attached read-only" grep -q 'file=.*sev-signer.raw\\,format=raw\\,readonly=on' <<<"$cmd"
+check "launch: data disk serial" grep -q 'serial=dvtee-data' <<<"$cmd"
+check "launch: root image attached read-only" grep -q 'file=.*dvtee.raw\\,format=raw\\,readonly=on' <<<"$cmd"
 check "launch: provisioning disk read-only" grep -q 'id=prov\\,file=[^ ]*\\,format=raw\\,readonly=on' <<<"$cmd"
 cmd=$(SNP_VCPUS=2 "$ROOT/scripts/launch-snp-guest.sh" --data d --append x --print)
 check "launch: overrides and -append" grep -q -- '-smp 2 .*-append x' <<<"$cmd"

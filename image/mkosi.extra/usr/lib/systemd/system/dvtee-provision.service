@@ -1,0 +1,24 @@
+# TEMPORARY: first-boot key provisioning from a host-shared disk. Skipped once
+# the sealed disk holds the `provisioned` marker. See /usr/lib/dvtee/provision.
+[Unit]
+Description=Provision dvtee keys from the host-shared disk (first boot only)
+ConditionPathExists=!/var/lib/dvtee/provisioned
+RequiresMountsFor=/var/lib/dvtee
+After=systemd-udev-trigger.service
+Before=dvtee.service
+FailureAction=poweroff-force
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/dvtee/provision
+StandardOutput=journal
+StandardError=journal
+PrivateNetwork=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/dvtee
+RuntimeDirectory=dvtee-provision
+RuntimeDirectoryMode=0700
+PrivateTmp=yes
+NoNewPrivileges=yes
+LimitCORE=0

@@ -1,11 +1,11 @@
 # Threat model
 
-What sev-signer protects, what it trusts, and what it doesn't try to stop. The status column says
+What DVTEE protects, what it trusts, and what it doesn't try to stop. The status column says
 whether a protection is built or planned; [ROADMAP.md](../ROADMAP.md#known-gaps) has the details.
 
 ## Deployment assumed
 
-- One sev-signer guest per operator, each holding that operator's key shares of a charon distributed
+- One dvtee guest per operator, each holding that operator's key shares of a charon distributed
   validator (DV) with threshold `t` of `n`.
 - The guest runs on AMD SEV-SNP hardware the operator owns or rents as bare metal. A cloud SNP guest
   that reaches the chip directly is an option.
@@ -27,7 +27,7 @@ whether a protection is built or planned; [ROADMAP.md](../ROADMAP.md#known-gaps)
 |---|---|---|
 | AMD SEV-SNP silicon, PSP firmware and microcode (closed source) | Memory encryption, the launch measurement, the attestation report, and the chip-derived sealing key | A minimum TCB is pinned in the sealing key and checked by the verifier. Physical attacks on memory are out of scope (below). |
 | AMD's key infrastructure (ARK, ASK, VCEK) | Signs the attestation report's chain | Root certificates pinned by fingerprint. |
-| The measured guest image: OVMF, kernel, initrd, command line, dm-verity root, sev-signer | Everything that runs in the guest | Reproducible builds, so anyone can recompute the measurement from source. |
+| The measured guest image: OVMF, kernel, initrd, command line, dm-verity root, dvtee | Everything that runs in the guest | Reproducible builds, so anyone can recompute the measurement from source. |
 | Pinned crypto dependencies (blst, rustls, ring, RustCrypto) | Signing, TLS, hashing | Exact versions, `cargo deny`. |
 | A threshold of the cluster's operators | Admitting a new image, recovering a share, changing settings | The same bar as the validator key in any DV. |
 | A quorum of Roughtime servers | The start floor's notion of "now" | Fewer than the quorum may lie. If they don't answer, signing stops; nothing unsafe is signed. |
@@ -39,7 +39,7 @@ whether a protection is built or planned; [ROADMAP.md](../ROADMAP.md#known-gaps)
 - charon;
 - the validator client;
 - the beacon node;
-- the sev-signer maintainers, after a release.
+- the DVTEE maintainers, after a release.
 
 A maintainer key cannot admit an image or move a share.
 

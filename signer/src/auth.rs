@@ -171,7 +171,7 @@ fn unauthorized() -> Response {
         .into_response();
     resp.headers_mut().insert(
         header::WWW_AUTHENTICATE,
-        HeaderValue::from_static("Basic realm=\"sev-signer\", charset=\"UTF-8\""),
+        HeaderValue::from_static("Basic realm=\"dvtee\", charset=\"UTF-8\""),
     );
     resp
 }

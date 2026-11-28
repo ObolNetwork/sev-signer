@@ -1,6 +1,6 @@
-# sev-signer: status and roadmap
+# DVTEE: status and roadmap
 
-Where `sev-signer` stands as a Web3Signer-compatible BLS signer for Obol distributed validators,
+Where `dvtee` stands as a Web3Signer-compatible BLS signer for Obol distributed validators,
 running in AMD SEV-SNP (later Intel TDX and Arm CCA), and what is left before it can hold real keys.
 It was first written in October 2026 and is updated as the work moves.
 
@@ -10,7 +10,7 @@ signers can compare designs. Nothing here has run on SEV-SNP hardware or been au
 
 ## TL;DR
 
-* **The signer (`signer/`, binary `sev-signer`) is a small Rust Web3Signer-compatible eth2 signer**
+* **The signer (`signer/`, binary `dvtee`) is a small Rust Web3Signer-compatible eth2 signer**
   with:
   * recomputed signing roots for every request type through Gloas, cross-checked against
     go-eth2-client with herumi BLS, the consensus spec tests and Web3Signer's own examples;
@@ -75,7 +75,7 @@ reviewed at the same time and are superseded by `signer/`.
   a universal signing oracle, which would defeat the point of putting the key in a TEE. That includes a
   generic "sign this root under this domain" call guarded by a list of forbidden (slashable) domains:
   it still signs deposits, registrations and exits with any contents, and every domain a future fork
-  adds. sev-signer only signs request types it knows, and refuses the rest.
+  adds. dvtee only signs request types it knows, and refuses the rest.
 * **Verified against an independent implementation.** Signing roots and signatures match go-eth2-client
   plus herumi BLS (`tests/vecgen`) byte for byte.
 * **Network pinning.** Requests whose `genesis_validators_root` differs from the configured network are
@@ -97,7 +97,7 @@ reviewed at the same time and are superseded by `signer/`.
   both support both.
 * **Attestation.** `GET /api/v1/tee/attestation?nonce=` uses configfs-tsm, so the same code serves
   SEV-SNP, TDX and CCA. REPORT_DATA binds the nonce, the TLS certificate and the BLS key set.
-* **Offline evidence check.** `sev-signer verify-evidence` checks the AMD chain against pinned roots,
+* **Offline evidence check.** `dvtee verify-evidence` checks the AMD chain against pinned roots,
   the report signature, the VCEK's TCB and chip id, guest policy, a minimum TCB, the binding and the
   expected measurement.
 * **Footprint.** No consensus types library. SSZ merkleization, including the progressive types Gloas
@@ -112,11 +112,11 @@ report offsets come from the specs; they have not been exercised on hardware.
 
 Cloud TEE signers, such as [lidofinance/tee-signer](https://github.com/lidofinance/tee-signer) on AWS
 Nitro, Azure SEV-SNP and GCP Confidential Space, seal keys with a cloud KMS policy, so the cloud vendor stays in the trust base for the key itself.
-sev-signer is chip-specific instead: AMD SEV-SNP, with the chip as the sealing root and attestation
+DVTEE is chip-specific instead: AMD SEV-SNP, with the chip as the sealing root and attestation
 checked against AMD's own certificate chain. It still runs on rented machines, but the provider can stop
 it, not unseal it. The two fail in different ways, which is the point of running both in one cluster.
 
-| | Cloud-KMS-sealed TEE signers (typical) | sev-signer (target design) |
+| | Cloud-KMS-sealed TEE signers (typical) | DVTEE (target design) |
 |---|---|---|
 | Sealing root | Cloud KMS / Key Vault policy | SNP derived key (`MSG_KEY_REQ`) over measurement, policy and a minimum TCB |
 | Who else can unseal | With a locked key or release policy (AWS, Azure), not the operator's admins; the cloud's KMS and attestation services stay trusted. GCP's rule can't be locked. | Nobody but AMD firmware; physical DIMM attacks are out of scope |
@@ -151,7 +151,7 @@ Cluster shape guidance that follows from this:
 
 1. **Key shares only enter the guest encrypted to it.**
    * **Plan A: the keymanager API.** `charon dkg --keymanager-address … --keymanager-auth-token …`
-     already pushes new shares to a keymanager instead of writing them to disk. sev-signer would
+     already pushes new shares to a keymanager instead of writing them to disk. dvtee would
      implement the keymanager import endpoint (`POST /eth/v1/keystores`, bearer token as the spec
      requires) on the mTLS listener.
      * Charon would first verify the signer's attestation and pin the TLS certificate bound into it.
@@ -237,13 +237,13 @@ Cluster shape guidance that follows from this:
 * Build the image with **mkosi**: reproducible builds, a UKI, a dm-verity root via systemd-repart, and
   a data partition on LUKS2 with dm-integrity (AEAD). **Written, not yet built or booted** (`image/`,
   first hardware session: [docs/hardware-runbook.md](docs/hardware-runbook.md)).
-* No shell, no getty, no sshd and no passwords. The only network listener is sev-signer; ceremonies
+* No shell, no getty, no sshd and no passwords. The only network listener is dvtee; ceremonies
   reach it through charon on the host. Logs go out over the network or the serial console.
 * Pin and build the kernel from source (OVMF: done, see `ovmf/`).
 * Publish expected launch measurements computed with `sev-snp-measure`.
 * Seal the data key with the SNP derived key using `MEASUREMENT | POLICY` and a pinned **minimum**
   TCB (snpguest `--tcb_version`), not the current TCB. That way firmware updates don't brick the disk
-  and downgrades below the minimum can't unseal it. The signer side is done (`sev-signer sealing-key`,
+  and downgrades below the minimum can't unseal it. The signer side is done (`dvtee sealing-key`,
   untested on hardware); the image still has to call it from the initrd.
 * **Fast restarts.** Once shares live on the sealed disk, the EIP-2335 password layer adds nothing
   against disk theft. Store them in a form that loads without scrypt or PBKDF2, so a restart costs
@@ -253,7 +253,7 @@ Cluster shape guidance that follows from this:
 
 * Add a verifier that checks the AMD chain (ARK → ASK → VCEK from KDS), the report signature, the
   measurement, the policy (debug off, SMT/migration policy) and the binding. Done in
-  `sev-signer verify-evidence`, offline with pinned AMD roots. It still needs a run against a live
+  `dvtee verify-evidence`, offline with pinned AMD roots. It still needs a run against a live
   report, and charon needs a Go equivalent or a way to call it.
 * Pin the attested TLS certificate in the validator client's web3signer configuration.
 * Have charon verify peers' signer evidence at startup and periodically, and expose it as a metric
@@ -263,10 +263,10 @@ Cluster shape guidance that follows from this:
   * specify `recover` and the ceremony order format in distributed-validator-specs, with test vectors;
   * implement `charon edit recover`;
   * add the guest's ceremony operations (deal, combine, complaints, recover steps, tombstone) to
-    sev-signer's local API;
+    dvtee's local API;
   * key slashing watermarks by validator, and carry them over on reshare.
 * **Client authentication in depth: mTLS and a bearer token.**
-  * **Why two secrets.** sev-signer pins client certificates, so a public CA failure can't forge a
+  * **Why two secrets.** dvtee pins client certificates, so a public CA failure can't forge a
     client. But a client key can still be weakly generated or leak; in October 2026 a public CA's
     intermediate keys turned out to be derivable from their certificates. A second, independently
     generated secret covers that case.
@@ -354,13 +354,13 @@ The honest state today. None of these are hidden; most are planned in the phases
 | Area | State |
 |---|---|
 | Hardware | Never run in a real SNP guest. configfs-tsm reading and the SNP/TDX report offsets come from the specs. The SNP derived-key ioctl behind `sealing-key` is pinned to the kernel UAPI header by tests but has not been run. Everything else can be developed on any Linux machine with the `insecure-dev` platform (see [`signer/README.md`](signer/README.md)). |
-| End-to-end | `e2e/devnet/` runs a Kurtosis devnet with a 3-of-4 charon cluster where Lighthouse, Teku, Lodestar and Prysm each sign through their own sev-signer (insecure-dev). Over two runs: charon accepted every partial signature, every duty type including aggregates reached the chain, DV duties kept working with one node down, and slashing protection held across signer restarts. Runs are manual (about 4 GB of RAM, 15–40 minutes), not in CI. Only the insecure-dev platform has been tested. `e2e/simnet.sh` is a lighter local smoke test on charon's beacon mock. |
+| End-to-end | `e2e/devnet/` runs a Kurtosis devnet with a 3-of-4 charon cluster where Lighthouse, Teku, Lodestar and Prysm each sign through their own dvtee (insecure-dev). Over two runs: charon accepted every partial signature, every duty type including aggregates reached the chain, DV duties kept working with one node down, and slashing protection held across signer restarts. Runs are manual (about 4 GB of RAM, 15–40 minutes), not in CI. Only the insecure-dev platform has been tested. `e2e/simnet.sh` is a lighter local smoke test on charon's beacon mock. |
 | Attestation verification | `verify-evidence` verifies SNP evidence offline: the AMD chain with the Milan, Genoa and Turin ARKs pinned, the report signature, the VCEK's TCB and chip id, guest policy and VMPL, the binding and the measurement. It is tested with a real Milan report and a real Turin VCEK, but not yet with a live report from our guest. Not checked: AMD's CRL, the configfs-tsm `auxblob` certificate table on a real host, and TDX quote signatures. |
 | Minimum TCB | `sealing-key` mixes a pinned minimum TCB into the SNP key. `verify-evidence --min-tcb` takes the same value and checks the reported and committed TCB against it, component by component. Neither has run on hardware. |
 | Guest image | The 2024 Alpine image is unsafe for keys (see Findings). The mkosi image (`image/`) builds, and builds from two separate checkouts are byte-identical; it has not yet booted on SNP hardware. Keys reach it through a temporary, host-readable first-boot disk. |
 | Anti-rollback | Start floor and horizon from a Roughtime quorum (design choice 5), on by default for public networks. It covers slashing watermarks only, not tombstones or share generations (cluster edits are not built). It depends on outbound UDP to the Roughtime servers, and three of the five defaults must answer. Without a quorum, blocks and attestations stop. Not yet run in the e2e devnet. |
 | Cluster edits | Not implemented. Recover, the reshare family with guests, ceremony orders and tombstones are designed in [docs/cluster-edits.md](docs/cluster-edits.md). Watermarks are stored per share pubkey, so a reshare would start them empty until they are keyed by validator. |
-| Forks | Gloas types implemented against consensus-specs v1.7.0-beta.4 and remote-signing-api v1.4.0, checked against the spec tests, go-eth2-client and Web3Signer's examples, and run on a Gloas devnet: Lighthouse, Teku, Lodestar and Prysm each signed every Gloas kind they use through sev-signer in a charon cluster, with no rejections, and every PTC vote was included. Gloas is still changing upstream, so each spec release needs re-checking. |
+| Forks | Gloas types implemented against consensus-specs v1.7.0-beta.4 and remote-signing-api v1.4.0, checked against the spec tests, go-eth2-client and Web3Signer's examples, and run on a Gloas devnet: Lighthouse, Teku, Lodestar and Prysm each signed every Gloas kind they use through dvtee in a charon cluster, with no rejections, and every PTC vote was included. Gloas is still changing upstream, so each spec release needs re-checking. |
 | Exits | `VOLUNTARY_EXIT` needs a client certificate or token with the `exit` role, and is not rate limited. In a DV each signer holds one share, so an exit needs a threshold of operators to sign. A `knownClients` line without roles still gets `exit`, for compatibility. A signer with neither mTLS nor tokens checks no roles. Exits authorised by a party other than the operators are an open design item. |
 | Operations | No metrics (planned, opt-in) or request-parser fuzzing. |
 | Load | Measured on a dev box only, not in an SNP guest ([docs/load-test.md](docs/load-test.md)): 100 attestations a slot plus the rest of the DV duty mix complete within 1 s, at a 22 ms median. Disk syncs set the tail (bursts up to 1.9 s at 200 a slot on a consumer NVMe), not signing. |

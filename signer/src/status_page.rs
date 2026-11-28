@@ -314,7 +314,7 @@ show the same thing. Check the report yourself, against the measurement publishe
 you expect:</p>
 <pre>NONCE=$(openssl rand -hex 32)
 curl -sk "https://{host}/api/v1/tee/attestation?nonce=$NONCE" &gt; evidence.json
-sev-signer verify-evidence --evidence evidence.json --nonce $NONCE{tee_flags}{lock_flag}</pre>
+dvtee verify-evidence --evidence evidence.json --nonce $NONCE{tee_flags}{lock_flag}</pre>
 </main></body></html>
 "#
     )

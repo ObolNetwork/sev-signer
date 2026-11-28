@@ -1,9 +1,9 @@
-# sev-signer and you
+# DVTEE and you
 
 > This describes the 2024 Alpine prototype in `vm-scripts/`, which is superseded. The current guest
 > image is described in [image/README.md](image/README.md).
 
-This document details the design and architecture of `sev-signer`.
+This document details the design and architecture of `dvtee`.
 
 The reference architecture is based on the following components:
  - a latest Ubuntu installation
@@ -15,7 +15,7 @@ This document will not detail *how* to setup such system, rather how it is desig
 
 ## The basics
 
-The aim of `sev-signer` is to implement a secure system in which the software running in it is secure against both the 
+The aim of `dvtee` is to implement a secure system in which the software running in it is secure against both the 
 hypervisor and other users - this is implemented by means of AMD SEV-SNP virtual machines running Alpine Linux.
 
 In a standard virtual machine (VM), the hypervisor is capable of controlling every single bit of its execution, more 
@@ -29,7 +29,7 @@ considered to be important.
 
 I will explain how those two properties are achieved later.
 
-The trust chain in `sev-signer` starts in the silicon: we trust that AMD private keys will not be compromised, and that 
+The trust chain in `dvtee` starts in the silicon: we trust that AMD private keys will not be compromised, and that 
 the SEV-SNP implementation currently in the markets is impossible to circumvent or tampered with:
 
  1. If the silicon boots, then it's safe
@@ -93,7 +93,7 @@ care of by the provisioning scripts in `vm-scripts`.
 QEMU starts a special UEFI that works in conjunction with the SEV-SNP subsystem - measurements are enforced by the 
 hardware itself, so a special implementation is needed in order for the trust anchor to be actually trustable.
 
-Instead of relying on a boot loader, `sev-signer` passes what's called a Unified Kernel Image (UKI) to QEMU to boot 
+Instead of relying on a boot loader, `dvtee` passes what's called a Unified Kernel Image (UKI) to QEMU to boot 
 from: less moving parts means less potential security issues in the future.
 
 UKIs make future improvements like boot signature verification easier, since they unify kernel image, initramfs and 
@@ -103,10 +103,10 @@ As a consequence, the measurements done by SEV-SNP are comprised of a single fil
 
 ## Installation
 
-Creating a `sev-signer` VM is more involved than usual, because we had to split the VM creation in several steps.
+Creating a `dvtee` VM is more involved than usual, because we had to split the VM creation in several steps.
 
 The following paragraph assume the user have compiled an initramfs and Linux kernel image by using the `make kernel` 
-command at the root of the `sev-signer` repository.
+command at the root of the `dvtee` repository.
 
 ### Step 1. Provisioning the installer
 

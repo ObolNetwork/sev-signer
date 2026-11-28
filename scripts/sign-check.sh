@@ -18,7 +18,7 @@
 # epoch, retries while the start floor still refuses it (up to about four
 # epochs after the signer started), and compares the signature with a
 # reference signer given as SIGN_CHECK_REF="URL CA_CERT". The reference is a
-# local insecure-dev sev-signer with the same keystore and
+# local insecure-dev dvtee with the same keystore and
 # --anti-rollback false. The request is kept in SIGN_CHECK_STATE (default
 # ./sign-check-live.json) so that conflict and replay reuse its target.
 set -euo pipefail

@@ -1,6 +1,6 @@
 # Guest image
 
-The SEV-SNP guest that runs sev-signer, built with [mkosi](https://github.com/systemd/mkosi). It
+The SEV-SNP guest that runs dvtee, built with [mkosi](https://github.com/systemd/mkosi). It
 replaces the 2024 Alpine image (`Dockerfile`, `build_kernel.sh`, `linux-mainline-sev-src/`,
 `vm-scripts/`), which is unsafe for keys (ROADMAP.md, Findings). Those files stay for reference
 only.
@@ -12,12 +12,12 @@ waits for the first session on SNP hardware: [docs/hardware-runbook.md](../docs/
 
 ```
 OVMF (ovmf/, AmdSevX64)          measured by the AMD secure processor
-  └─ -kernel sev-signer.efi      UKI; kernel-hashes=on puts its hash in measured memory,
+  └─ -kernel dvtee.efi      UKI; kernel-hashes=on puts its hash in measured memory,
                                  and OVMF refuses a UKI or command line that doesn't match
        └─ systemd-stub → Linux + initrd + command line (all inside the UKI)
             initrd: dm-verity root from roothash= on the command line
-                    sev-signer-unlock: open (or create) the sealed data disk, or power off
-            root:   sev-signer-provision (first boot only), then sev-signer
+                    dvtee-unlock: open (or create) the sealed data disk, or power off
+            root:   dvtee-provision (first boot only), then dvtee
 ```
 
 Everything the guest runs is in the launch measurement: the firmware, and the UKI's kernel, initrd
@@ -27,18 +27,18 @@ and command line. The root filesystem is tied in through the verity root hash on
 
 | Disk | virtio serial | Contents | Trust |
 |---|---|---|---|
-| `sev-signer.raw` | any | erofs root + dm-verity hash partition | verified against the measured root hash |
-| data (`truncate -s 1G data.img`) | `sev-signer-data` | LUKS2, `aegis128-random` with AEAD integrity, 4 KiB sectors, ext4 | sealed: only this image, policy and chip can open it |
-| provisioning | `sev-signer-prov` | tar archive: keystores and settings | **host-readable; first boot only; temporary** |
+| `dvtee.raw` | any | erofs root + dm-verity hash partition | verified against the measured root hash |
+| data (`truncate -s 1G data.img`) | `dvtee-data` | LUKS2, `aegis128-random` with AEAD integrity, 4 KiB sectors, ext4 | sealed: only this image, policy and chip can open it |
+| provisioning | `dvtee-prov` | tar archive: keystores and settings | **host-readable; first boot only; temporary** |
 
 The data disk holds everything the signer writes: keys, slashing protection and its TLS key
-(`/var/lib/sev-signer`). Everything else is read-only or in memory (`systemd.volatile=state`).
+(`/var/lib/dvtee`). Everything else is read-only or in memory (`systemd.volatile=state`).
 
 ## Sealing
 
-`sev-signer-unlock` runs in the initrd:
+`dvtee-unlock` runs in the initrd:
 
-* The key is `sev-signer sealing-key --purpose data-disk --snp-min-tcb <pinned> --snp-vmpl 0`.
+* The key is `dvtee sealing-key --purpose data-disk --snp-min-tcb <pinned> --snp-vmpl 0`.
 * That key is an SNP derived key: VCEK root, with MEASUREMENT, POLICY and the pinned minimum
   TCB_VERSION mixed in (`signer/src/platform.rs`).
 * The minimum TCB is a build input (`SNP_MIN_TCB`), stored in the measured initrd.
@@ -78,17 +78,17 @@ Decision table:
 
 ## The signer
 
-* `sev-signer.service` is the only network listener: 9000 for signing and 9001 public (health and
+* `dvtee.service` is the only network listener: 9000 for signing and 9001 public (health and
   attestation).
 * Its flags come from settings provisioned onto the sealed disk, never from the host. `start`
-  validates them and runs the signer under `env -i`, so no `SEV_SIGNER_*` variable gets through.
+  validates them and runs the signer under `env -i`, so no `DVTEE_*` variable gets through.
 * It runs as uid 0 with no capabilities, because configfs-tsm report entries are root-owned.
 * Its file system view is read-only, except the data dir and `/sys/kernel/config/tsm/report`.
 * It has a syscall filter, no new privileges and no core dumps.
 
 ## Provisioning (temporary)
 
-On the first boot only, `sev-signer-provision` reads a tar archive from the `sev-signer-prov` disk.
+On the first boot only, `dvtee-provision` reads a tar archive from the `dvtee-prov` disk.
 
 * **What it accepts.** Keystores in charon's `validator_keys/` layout, the network (a preset, or a
   devnet `config.yaml` with its genesis validators root), and optionally TLS SANs, pinned client
@@ -109,7 +109,7 @@ make image-measure                           # expected MEASUREMENT, as JSON
 make image-test                              # unit tests for the boot scripts
 ```
 
-`image/build.sh` builds a static sev-signer in `rust:1.100.0-slim-trixie` (pinned by digest,
+`image/build.sh` builds a static dvtee in `rust:1.100.0-slim-trixie` (pinned by digest,
 `cargo --locked`). It then runs mkosi v27.1, pinned by commit. Pins:
 
 | Input | Pin |

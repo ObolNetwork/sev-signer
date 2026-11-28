@@ -6,7 +6,7 @@
 //! `sepolia.yaml` (`scripts/fetch-upstream-configs.sh` fetches them); the
 //! scheduled `presets` workflow does that daily.
 
-use sev_signer::network::{FAR_FUTURE_EPOCH, Network};
+use dvtee::network::{FAR_FUTURE_EPOCH, Network};
 
 #[test]
 fn presets_match_upstream() {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prints the fields of an SEV-SNP attestation report that the hardware
 runbook records: measurement, policy, the four TCB values (raw 64-bit, the
-form `sev-signer sealing-key --snp-min-tcb` and SNP_MIN_TCB take), chip ID,
+form `dvtee sealing-key --snp-min-tcb` and SNP_MIN_TCB take), chip ID,
 and the firmware version.
 
     scripts/snp-report-fields.py evidence.json   # from /api/v1/tee/attestation
@@ -11,7 +11,7 @@ and the firmware version.
 
 Offsets are from the SEV-SNP ABI (ATTESTATION_REPORT), as parsed by the
 virtee `sev` crate. Nothing here checks the signature: that is
-`sev-signer verify-evidence` and `snpguest verify attestation`.
+`dvtee verify-evidence` and `snpguest verify attestation`.
 """
 import json
 import struct

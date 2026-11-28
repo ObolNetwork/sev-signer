@@ -12,9 +12,9 @@
 //! upstream (it must be 256); the test checks that it is rejected and uses a
 //! corrected copy.
 
+use dvtee::network::Network;
+use dvtee::signing::{self, Policy, PrepareError, SignBody, SignRequest};
 use serde_json::Value;
-use sev_signer::network::Network;
-use sev_signer::signing::{self, Policy, PrepareError, SignBody, SignRequest};
 
 /// The examples' chain: genesis validators root 0x0470...a673 with every fork
 /// at epoch 0 and every fork version 0x00000001, as their fork_info says.
@@ -31,7 +31,7 @@ fn example_network(gvr: &str) -> Network {
     ] {
         cfg += &format!("{fork}_FORK_VERSION: 0x00000001\n{fork}_FORK_EPOCH: 0\n");
     }
-    Network::from_config_yaml(&cfg, sev_signer::network::parse_root(gvr).unwrap()).unwrap()
+    Network::from_config_yaml(&cfg, dvtee::network::parse_root(gvr).unwrap()).unwrap()
 }
 
 #[test]
