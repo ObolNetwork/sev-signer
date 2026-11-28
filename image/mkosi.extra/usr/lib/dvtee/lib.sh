@@ -11,7 +11,7 @@
 DVTEE_DATA=${DVTEE_DATA:-/var/lib/dvtee}
 
 # Every path the provisioning archive may contain.
-DVTEE_TAR_NAMES='^(validator_keys/?|config/?|validator_keys/keystore-[0-9]{1,5}\.(json|txt)|config/(network|config\.yaml|genesis-validators-root|tls-sans|knownClients\.txt|cluster-lock\.json|tokens\.txt|log-level))$'
+DVTEE_TAR_NAMES='^(validator_keys/?|config/?|validator_keys/keystore-[0-9]{1,5}\.(json|txt)|config/(network|config\.yaml|genesis-validators-root|tls-sans|knownClients\.txt|cluster-lock\.json|tokens\.txt|log-level|keymanager-import))$'
 
 dvtee_fail() {
 	echo "dvtee: $*" >&2
@@ -83,6 +83,19 @@ dvtee_check_config() {
 	if [[ -e $c/log-level ]]; then
 		dvtee_check_line "$c/log-level" '^(info|debug)$' 8 || return 1
 	fi
+	if [[ -e $c/keymanager-import ]]; then
+		dvtee_check_line "$c/keymanager-import" '^on$' 4 || return 1
+		# Keys arrive later over the keymanager API; the signer needs an import token.
+		[[ -e $c/tokens.txt ]] && grep -Eq '^[^#[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+([a-z]+,)*import(,[a-z]+)*[[:space:]]*$' "$c/tokens.txt" \
+			|| { dvtee_fail "keymanager-import needs a tokens.txt line with the import role"; return 1; }
+		[[ ! -e $k ]] || [[ -d $k && ! -L $k ]] || { dvtee_fail "$k is not a directory"; return 1; }
+		# Keys imported over the API (after provisioning) are checked like any others.
+		for f in "$k"/keystore-*.json; do
+			[[ -f $f && ! -L $f ]] || continue
+			[[ -f ${f%.json}.txt && ! -L ${f%.json}.txt ]] || { dvtee_fail "$f has no password file"; return 1; }
+		done
+		return 0
+	fi
 	[[ -d $k && ! -L $k ]] || { dvtee_fail "missing $k"; return 1; }
 	for f in "$k"/keystore-*.json; do
 		[[ -f $f && ! -L $f ]] || continue
@@ -121,6 +134,9 @@ dvtee_build_args() {
 	fi
 	if [[ -e $c/tokens.txt ]]; then
 		DVTEE_ARGS+=(--auth-token-file "$c/tokens.txt")
+	fi
+	if [[ -e $c/keymanager-import ]]; then
+		DVTEE_ARGS+=(--keymanager-import)
 	fi
 	DVTEE_LOG=dvtee=info,tower_http=warn
 	if [[ -e $c/log-level && $(<"$c/log-level") == debug ]]; then

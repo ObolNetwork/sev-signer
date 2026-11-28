@@ -190,6 +190,11 @@ impl SecretKey {
         self.public
     }
 
+    #[cfg(test)]
+    pub(crate) fn to_bytes(&self) -> [u8; 32] {
+        self.inner.to_bytes()
+    }
+
     pub fn sign(&self, root: &[u8; 32]) -> [u8; 96] {
         self.inner.sign(root, DST, &[]).to_bytes()
     }
@@ -219,6 +224,33 @@ pub fn load_dir(dir: &Path) -> anyhow::Result<BTreeMap<[u8; 48], SecretKey>> {
         keys.insert(sk.public_key(), sk);
     }
     Ok(keys)
+}
+
+/// An EIP-2335 keystore for `sk` with a one-round pbkdf2 KDF (tests only).
+#[cfg(test)]
+pub(crate) fn tests_encrypt(sk: &SecretKey, password: &str) -> String {
+    let salt = [7u8; 32];
+    let iv = [9u8; 16];
+    let mut dk = [0u8; 32];
+    pbkdf2::pbkdf2_hmac::<Sha256>(&normalize_password(password), &salt, 1, &mut dk);
+    let mut ct = sk.to_bytes().to_vec();
+    Aes128Ctr::new_from_slices(&dk[..16], &iv)
+        .unwrap()
+        .apply_keystream(&mut ct);
+    let mut h = Sha256::new();
+    h.update(&dk[16..32]);
+    h.update(&ct);
+    let checksum: [u8; 32] = h.finalize().into();
+    serde_json::json!({
+        "crypto": {
+            "kdf": {"function": "pbkdf2", "params": {"dklen": 32, "c": 1, "prf": "hmac-sha256", "salt": hex::encode(salt)}, "message": ""},
+            "checksum": {"function": "sha256", "params": {}, "message": hex::encode(checksum)},
+            "cipher": {"function": "aes-128-ctr", "params": {"iv": hex::encode(iv)}, "message": hex::encode(&ct)},
+        },
+        "pubkey": hex::encode(sk.public_key()),
+        "path": "", "uuid": "00000000-0000-4000-8000-000000000001", "version": 4,
+    })
+    .to_string()
 }
 
 #[cfg(test)]

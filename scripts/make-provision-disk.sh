@@ -10,17 +10,23 @@
 #   scripts/make-provision-disk.sh -o prov.img -k validator_keys/ \
 #       -c config.yaml -g 0x<genesis validators root> [-s localhost,127.0.0.1] \
 #       [-K knownClients.txt] [-L cluster-lock.json] [-T tokens.txt] [-l debug]
+#   scripts/make-provision-disk.sh -o prov.img -I -n hoodi -T tokens.txt [-s ...] [-K ...]
+#
+# -I (keymanager import): no keys on this disk. The guest starts with none and
+# takes them from `charon dkg --keymanager-address`, then the cluster lock;
+# -T must list a token with the `import` role. Nothing secret is on the disk.
 #
 # -k takes charon's validator_keys/ layout: keystore-N.json with keystore-N.txt.
 set -euo pipefail
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
 
-out='' keys='' net='' cfg='' gvr='' sans='' known='' lock='' tokens='' level=''
-while getopts o:k:n:c:g:s:K:L:T:l:h opt; do
+out='' keys='' import='' net='' cfg='' gvr='' sans='' known='' lock='' tokens='' level=''
+while getopts o:k:In:c:g:s:K:L:T:l:h opt; do
 	case $opt in
 	o) out=$OPTARG ;;
 	k) keys=$OPTARG ;;
+	I) import=on ;;
 	n) net=$OPTARG ;;
 	c) cfg=$OPTARG ;;
 	g) gvr=$OPTARG ;;
@@ -32,7 +38,11 @@ while getopts o:k:n:c:g:s:K:L:T:l:h opt; do
 	*) usage ;;
 	esac
 done
-[[ -n $out && -d $keys ]] || usage
+if [[ -n $import ]]; then
+	[[ -n $out && -z $keys ]] || { echo "-I takes no -k: keys arrive over the keymanager API" >&2; exit 2; }
+else
+	[[ -n $out && -d $keys ]] || usage
+fi
 if [[ -n $cfg ]]; then
 	[[ -z $net && -f $cfg && $gvr =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "-c needs -g 0x<64 hex> and no -n" >&2; exit 2; }
 	net=config.yaml
@@ -44,7 +54,7 @@ stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/validator_keys" "$stage/config"
 n=0
-for ks in "$keys"/keystore-*.json; do
+for ks in ${keys:+"$keys"/keystore-*.json}; do
 	[[ -f $ks ]] || continue
 	base=$(basename "$ks" .json)
 	[[ $base =~ ^keystore-[0-9]{1,5}$ ]] || { echo "unexpected keystore name $ks" >&2; exit 1; }
@@ -52,7 +62,7 @@ for ks in "$keys"/keystore-*.json; do
 	cp "$ks" "$keys/$base.txt" "$stage/validator_keys/"
 	n=$((n + 1))
 done
-((n > 0)) || { echo "no keystore-*.json in $keys" >&2; exit 1; }
+[[ -n $import ]] || ((n > 0)) || { echo "no keystore-*.json in $keys" >&2; exit 1; }
 
 printf '%s\n' "$net" >"$stage/config/network"
 if [[ $net == config.yaml ]]; then
@@ -64,6 +74,7 @@ fi
 [[ -z $lock ]] || cp "$lock" "$stage/config/cluster-lock.json"
 [[ -z $tokens ]] || cp "$tokens" "$stage/config/tokens.txt"
 [[ -z $level ]] || printf '%s\n' "$level" >"$stage/config/log-level"
+[[ -z $import ]] || printf 'on\n' >"$stage/config/keymanager-import"
 chmod -R u=rwX,go= "$stage"
 # The same checks the guest runs, so a bad disk fails here rather than at boot.
 # shellcheck source-path=SCRIPTDIR source=../image/mkosi.extra/usr/lib/dvtee/lib.sh
@@ -72,4 +83,8 @@ dvtee_check_config "$stage" || exit 1
 
 tar --create --format=gnu --owner=0 --group=0 --numeric-owner --mtime=@0 --sort=name \
 	--directory "$stage" --file "$out" validator_keys config
-echo "wrote $out: $n keystore(s), network $net. The host can read it: test keys only." >&2
+if [[ -n $import ]]; then
+	echo "wrote $out: keymanager import (no keys), network $net." >&2
+else
+	echo "wrote $out: $n keystore(s), network $net. The host can read it: test keys only." >&2
+fi

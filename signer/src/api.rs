@@ -25,7 +25,7 @@ use crate::tls::{ClientFingerprint, KnownRoles, Role};
 
 pub struct AppState {
     pub keys: BTreeMap<[u8; 48], SecretKey>,
-    pub db: SlashingDb,
+    pub db: Arc<SlashingDb>,
     pub network: Network,
     pub policy: Policy,
     /// DER of the TLS certificate the API is served with, if any.

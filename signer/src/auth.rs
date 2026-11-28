@@ -88,6 +88,18 @@ impl Tokens {
         self.0.len()
     }
 
+    /// Whether the request's token (Bearer or Basic) holds `role`.
+    pub fn grants(&self, headers: &axum::http::HeaderMap, role: Role) -> bool {
+        presented_token_in(headers)
+            .and_then(|t| self.find(&t).map(|e| e.roles.contains(&role)))
+            .unwrap_or(false)
+    }
+
+    /// Whether any token holds `role`.
+    pub fn any_with(&self, role: Role) -> bool {
+        self.0.iter().any(|e| e.roles.contains(&role))
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -116,7 +128,11 @@ fn ct_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
 
 /// The token in `Authorization: Bearer <t>` or `Basic base64(<user>:<t>)`.
 fn presented_token(req: &Request) -> Option<Vec<u8>> {
-    let value = req.headers().get(header::AUTHORIZATION)?.to_str().ok()?;
+    presented_token_in(req.headers())
+}
+
+fn presented_token_in(headers: &axum::http::HeaderMap) -> Option<Vec<u8>> {
+    let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let (scheme, rest) = value.trim().split_once(' ')?;
     if scheme.eq_ignore_ascii_case("bearer") {
         Some(rest.trim().as_bytes().to_vec())

@@ -388,7 +388,9 @@ fn app_with_clock(
 ) -> axum::Router {
     let state = AppState {
         keys: keystore::load_dir(&dir().join("keystores")).unwrap(),
-        db: SlashingDb::open(&data.join("slashing"), net.genesis_validators_root).unwrap(),
+        db: std::sync::Arc::new(
+            SlashingDb::open(&data.join("slashing"), net.genesis_validators_root).unwrap(),
+        ),
         network: net,
         policy,
         tls_cert: None,
@@ -619,7 +621,9 @@ async fn client_roles() {
     let net = hoodi_gloas();
     let state = AppState {
         keys: keystore::load_dir(&dir().join("keystores")).unwrap(),
-        db: SlashingDb::open(&tmp.path().join("slashing"), net.genesis_validators_root).unwrap(),
+        db: std::sync::Arc::new(
+            SlashingDb::open(&tmp.path().join("slashing"), net.genesis_validators_root).unwrap(),
+        ),
         network: net,
         policy: allow_all(),
         tls_cert: None,
@@ -678,7 +682,9 @@ async fn auth_tokens() {
     let net = hoodi_gloas();
     let state = AppState {
         keys: keystore::load_dir(&dir().join("keystores")).unwrap(),
-        db: SlashingDb::open(&tmp.path().join("slashing"), net.genesis_validators_root).unwrap(),
+        db: std::sync::Arc::new(
+            SlashingDb::open(&tmp.path().join("slashing"), net.genesis_validators_root).unwrap(),
+        ),
         network: net,
         policy: allow_all(),
         tls_cert: None,

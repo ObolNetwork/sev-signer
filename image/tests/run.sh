@@ -225,6 +225,22 @@ check "start: cluster lock" grep -q -- "--cluster-lock $PSTATE/data/config/clust
 check "start: auth tokens" grep -q -- "--auth-token-file $PSTATE/data/config/tokens.txt" <<<"$args"
 check "start: default log level" grep -qx 'RUST_LOG=dvtee=info,tower_http=warn' "$PSTATE/serve-env"
 
+# Keymanager import: no keys on the disk; an import token is required.
+prov_env import
+echo "charon $(printf 'b%.0s' {1..40}) import" >"$T/import-tokens.txt"
+check "make-provision-disk: -I refuses -k" fails "$MKDISK" -o "$PSTATE/x.img" -I -k "$KEYS" -n hoodi -T "$T/import-tokens.txt"
+check "make-provision-disk: -I needs an import token" fails "$MKDISK" -o "$PSTATE/x.img" -I -n hoodi -T "$T/tokens.txt"
+check "make-provision-disk: keymanager import disk" "$MKDISK" -o "$PSTATE/prov.img" -I -n hoodi -T "$T/import-tokens.txt"
+check "provision: keymanager import disk accepted" run_provision "$PSTATE/prov.img"
+check "provision: import disk copies no keys" test -z "$(ls -A "$PSTATE/data/validator_keys")"
+check "start: runs (import)" run_start
+args=$(tr '\n' ' ' <"$PSTATE/serve-args" 2>/dev/null)
+check "start: keymanager import flag" grep -q -- '--keymanager-import' <<<"$args"
+check "start: import token file" grep -q -- "--auth-token-file $PSTATE/data/config/tokens.txt" <<<"$args"
+# After the import the keys are on the sealed disk; the flag stays and start still runs.
+cp "$KEYS"/keystore-0.* "$PSTATE/data/validator_keys/"
+check "start: runs after an import" run_start
+
 # Hostile archives: each must be rejected and leave no marker.
 reject() { # description, archive
 	prov_env "r$RANDOM"
@@ -237,6 +253,13 @@ good_tree() { # a valid layout in $1
 }
 
 d=$T/h-symlink; good_tree "$d"; ln -s /etc/shadow "$d/config/knownClients.txt"
+d=$T/h-importkeys; good_tree "$d"; echo on >"$d/config/keymanager-import"; echo "charon $(printf 'c%.0s' {1..40}) import" >"$d/config/tokens.txt"
+tar_of "$d" "$T/importkeys.tar" validator_keys config
+reject "keymanager-import with keystores on the disk" "$T/importkeys.tar"
+d=$T/h-importnotoken; mkdir -p "$d/validator_keys" "$d/config"; echo hoodi >"$d/config/network"; echo on >"$d/config/keymanager-import"
+tar_of "$d" "$T/importnotoken.tar" validator_keys config
+reject "keymanager-import without an import token" "$T/importnotoken.tar"
+
 tar_of "$d" "$T/symlink.tar" validator_keys config
 reject "a symlink" "$T/symlink.tar"
 

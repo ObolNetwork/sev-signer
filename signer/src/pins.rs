@@ -156,7 +156,7 @@ impl Pins {
 }
 
 /// Writes `path` via a temporary file, fsyncing the file and the directory.
-fn write_durable(dir: &Path, path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_durable(dir: &Path, path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     fs::create_dir_all(dir)?;
     let tmp = path.with_extension("tmp");
     {

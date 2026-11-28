@@ -203,6 +203,14 @@ struct ServeArgs {
     /// (`https://vc:<token>@host:port`) or as `Authorization: Bearer`.
     #[arg(long, env = "DVTEE_AUTH_TOKEN_FILE")]
     auth_token_file: Option<PathBuf>,
+    /// Start with no keys and take them from `charon dkg --keymanager-address`
+    /// (`POST /eth/v1/keystores` on the public listener, once), then the
+    /// cluster lock (`POST /dvtee/v1/cluster-lock`); the process then exits
+    /// with status 75 to be restarted in signing mode. Needs TLS,
+    /// --public-listen and a token with the `import` role. Ignored once keys
+    /// and a pinned lock exist.
+    #[arg(long, env = "DVTEE_KEYMANAGER_IMPORT")]
+    keymanager_import: bool,
     /// Second TLS listener serving only /upcheck, /healthcheck and
     /// /api/v1/tee/attestation, without client certificates, so peers and
     /// monitoring can fetch evidence while signing stays behind mTLS.
@@ -319,7 +327,31 @@ async fn serve(args: ServeArgs) -> anyhow::Result<()> {
         );
     }
 
-    let keys = keystore::load_dir(&args.keystores_dir)?;
+    let pending = dvtee::import::startup(&args.data_dir, &args.keystores_dir)?;
+    let keys = dvtee::import::load_keys(&args.keystores_dir)?;
+    if pending == dvtee::import::Startup::Pending || (keys.is_empty() && args.keymanager_import) {
+        anyhow::ensure!(
+            args.keymanager_import,
+            "a key import is pending in {} but --keymanager-import is off",
+            args.data_dir.display()
+        );
+        return serve_import(
+            ImportOpts {
+                data_dir: args.data_dir.clone(),
+                keystores_dir: args.keystores_dir.clone(),
+                tls_sans: args.tls_sans.clone(),
+                tls_known_clients: args.tls_known_clients.clone(),
+                public_listen: args.public_listen,
+                auth_token_file: args.auth_token_file.clone(),
+                insecure_http: args.insecure_http,
+            },
+            network,
+            platform,
+            clock,
+            keys,
+        )
+        .await;
+    }
     if keys.is_empty() {
         bail!("no keystores found in {}", args.keystores_dir.display());
     }
@@ -372,7 +404,7 @@ async fn serve(args: ServeArgs) -> anyhow::Result<()> {
 
     let state = Arc::new(AppState {
         keys,
-        db,
+        db: std::sync::Arc::new(db),
         network: network.clone(),
         policy: Policy {
             allow_voluntary_exits: args.allow_voluntary_exits,
@@ -445,6 +477,101 @@ async fn serve(args: ServeArgs) -> anyhow::Result<()> {
                 .serve(app.into_make_service())
                 .await?
         }
+    }
+    Ok(())
+}
+
+/// Import mode: only the public listener, serving health, attestation and the
+/// one-time key and lock import (see `dvtee::import`). Exits with
+/// `EXIT_IMPORTED` once the lock is pinned.
+struct ImportOpts {
+    data_dir: PathBuf,
+    keystores_dir: PathBuf,
+    tls_sans: Vec<String>,
+    tls_known_clients: Option<PathBuf>,
+    public_listen: Option<SocketAddr>,
+    auth_token_file: Option<PathBuf>,
+    insecure_http: bool,
+}
+
+async fn serve_import(
+    args: ImportOpts,
+    network: Network,
+    platform: dvtee::platform::Platform,
+    clock: Option<Arc<TrustedClock>>,
+    keys: std::collections::BTreeMap<[u8; 48], keystore::SecretKey>,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !args.insecure_http,
+        "--keymanager-import needs TLS: keys and passwords arrive over it"
+    );
+    let addr = args
+        .public_listen
+        .context("--keymanager-import serves the import on --public-listen; set it")?;
+    let tokens = dvtee::auth::Tokens::load(
+        args.auth_token_file
+            .as_deref()
+            .context("--keymanager-import needs --auth-token-file with an `import` token")?,
+    )?;
+    let m = tls::load_or_generate(
+        &args.data_dir.join("tls"),
+        &args.tls_sans,
+        args.tls_known_clients.as_deref(),
+    )?;
+    let db = Arc::new(SlashingDb::open(
+        &args.data_dir.join("slashing"),
+        network.genesis_validators_root,
+    )?);
+    let pubkeys: Vec<[u8; 48]> = keys.keys().copied().collect();
+    let import = dvtee::import::ImportState::new(
+        args.data_dir.clone(),
+        args.keystores_dir.clone(),
+        tokens,
+        db.clone(),
+        pubkeys,
+    )?;
+    let state = Arc::new(AppState {
+        keys,
+        db,
+        network: network.clone(),
+        policy: Policy {
+            allow_voluntary_exits: false,
+            allow_deposits: false,
+        },
+        tls_cert: Some((m.cert_der.clone(), m.cert_pem.clone())),
+        platform,
+        pins: None,
+        roles: None,
+        tokens: None,
+        clock,
+    });
+    let app = api::public_router(state)
+        .merge(dvtee::import::router(import.clone()))
+        .layer(tower_http::trace::TraceLayer::new_for_http());
+    tracing::info!(
+        listen = %addr,
+        network = %network.name,
+        "dvtee import mode: waiting for keys (POST /eth/v1/keystores), then the cluster lock (POST /dvtee/v1/cluster-lock); not signing"
+    );
+    let handle = axum_server::Handle::new();
+    let h = handle.clone();
+    let imp = import.clone();
+    let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let f = finished.clone();
+    tokio::spawn(async move {
+        tokio::select! {
+            _ = shutdown_signal() => tracing::info!("shutting down"),
+            _ = imp.finished() => f.store(true, std::sync::atomic::Ordering::SeqCst),
+        }
+        h.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
+    });
+    let cfg = axum_server::tls_rustls::RustlsConfig::from_config(m.public_config);
+    axum_server::bind_rustls(addr, cfg)
+        .handle(handle)
+        .serve(app.into_make_service())
+        .await?;
+    if finished.load(std::sync::atomic::Ordering::SeqCst) {
+        std::process::exit(dvtee::import::EXIT_IMPORTED);
     }
     Ok(())
 }

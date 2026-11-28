@@ -1,6 +1,7 @@
 pub mod anti_rollback;
 pub mod api;
 pub mod auth;
+pub mod import;
 pub mod keystore;
 pub mod lock;
 pub mod network;
