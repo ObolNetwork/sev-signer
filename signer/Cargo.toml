@@ -10,27 +10,27 @@ publish = false
 [dependencies]
 # Crypto and key-handling crates are pinned to exact versions; bump them
 # deliberately, one at a time, with the spec and vector tests.
-aes = "=0.8.4"
+aes = "=0.9.2"
 anyhow = "1.0.104"
 base64 = "0.23.1"
 axum = "0.8.9"
 axum-server = { version = "0.8.0", features = ["tls-rustls-no-provider"] }
 blst = "=0.3.17"
 clap = { version = "4.6.7", features = ["derive", "env"] }
-ctr = "=0.9.2"
+ctr = "=0.10.1"
 hex = "0.4.3"
-hmac = "=0.12.1"
-pbkdf2 = "=0.12.2"
+hmac = "=0.13.0"
+pbkdf2 = "=0.13.0"
 # Report and AMD chain signatures (RSA-PSS, ECDSA P-384); already used by rustls.
 ring = "=0.17.14"
 rcgen = { version = "=0.14.10", default-features = false, features = ["crypto", "pem", "ring"] }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 # System CA roots for `verify-evidence --fetch-vcek` (AMD KDS over HTTPS).
 rustls-native-certs = "=0.8.5"
-scrypt = "=0.11.0"
+scrypt = "=0.12.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-sha2 = "=0.10.9"
+sha2 = "=0.11.1"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "fs", "sync"] }
 tokio-rustls = { version = "0.26.6", default-features = false }
