@@ -30,7 +30,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  SNP_MIN_TCB: ${{ inputs.snp_min_tcb || '0x0000000000000000' }}
+  # A run's input, else the repo variable SNP_MIN_TCB (the hardware host's pinned
+  # minimum TCB, docs/hardware-runbook.md), else the discovery build.
+  SNP_MIN_TCB: ${{ inputs.snp_min_tcb || vars.SNP_MIN_TCB || '0x0000000000000000' }}
   PROFILE: ${{ inputs.profile || '' }}
 
 jobs:
