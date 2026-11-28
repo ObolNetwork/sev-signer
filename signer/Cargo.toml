@@ -40,7 +40,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 unicode-normalization = "=0.1.26"
 # Parsing the AMD certificates (ARK, ASK, VCEK) for verify-evidence.
 x509-cert = { version = "=0.3.1", default-features = false }
-zeroize = "=1.9.1"
+zeroize = "=1.9.2"
 
 # Load test client (`--features load-test`). Already in the lock file through
 # axum and axum-server, except hyper's client-side `want` and `try-lock`.
